@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Notification": [
+        {
+            "matcher": "",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "/home/jantman/bin/claude_notify.sh \"$(basename $(pwd))\""
+                }
+            ]
+        }
+    ]
+  }
+}

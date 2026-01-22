@@ -43,7 +43,7 @@ Create `.github/workflows/test.yml` that:
 
 # Implementation Plan
 
-## Status: IN PROGRESS
+## Status: COMPLETE
 
 Commit message prefix format: `TestCI - {Milestone}.{Task}: {summary}`
 
@@ -93,26 +93,28 @@ Commit message prefix format: `TestCI - {Milestone}.{Task}: {summary}`
 
 ### Milestone 1: Daemon Unit Tests
 
-**Status**: NOT STARTED
+**Status**: COMPLETE
 
-- [ ] Task 1.1: Test Daemon initialization
-- [ ] Task 1.2: Test Daemon start/stop
-- [ ] Task 1.3: Test permission request handling
-- [ ] Task 1.4: Test Slack action handling
-- [ ] Task 1.5: Test idle state change handling
-- [ ] Task 1.6: Test helper functions
+- [x] Task 1.1: Test Daemon initialization (5 tests)
+- [x] Task 1.2: Test Daemon start/stop (6 tests)
+- [x] Task 1.3: Test permission request handling (7 tests)
+- [x] Task 1.4: Test Slack action handling (4 tests)
+- [x] Task 1.5: Test idle state change handling (5 tests)
+- [x] Task 1.6: Test helper functions (9 tests)
+
+Total: 36 new tests, 142 tests overall passing
 
 ### Milestone 2: GitHub Actions Workflow
 
-**Status**: NOT STARTED
+**Status**: COMPLETE
 
-- [ ] Task 2.1: Create workflow file
-- [ ] Task 2.2: Verify workflow syntax
+- [x] Task 2.1: Create workflow file (.github/workflows/test-permission-daemon.yml)
+- [x] Task 2.2: Verify workflow syntax (YAML validated)
 
 ### Milestone 3: Acceptance Criteria
 
-**Status**: NOT STARTED
+**Status**: COMPLETE
 
-- [ ] Task 3.1: Verify coverage improvement
-- [ ] Task 3.2: Full test suite pass
-- [ ] Task 3.3: Move feature to completed
+- [x] Task 3.1: Verify coverage improvement (60% -> 75%, target met)
+- [x] Task 3.2: Full test suite pass (142 tests)
+- [x] Task 3.3: Move feature to completed

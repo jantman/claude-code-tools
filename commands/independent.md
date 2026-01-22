@@ -1,0 +1,1 @@
+You may proceed through the entire feature without further confirmation from me provided that you commit after every task and if you find yourself confused, unsure how to proceed, or making multiple attempts to solve the same problem, you ask me for input.

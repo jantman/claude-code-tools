@@ -1,0 +1,1 @@
+Please commit to git using a detailed commit message beginning with a concise one-sentence summary.

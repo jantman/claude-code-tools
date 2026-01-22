@@ -290,13 +290,13 @@ Commit message prefix format: `Init - {Milestone}.{Task}: {summary}`
 
 ### Milestone 3: Slack Integration
 
-**Status**: NOT STARTED
+**Status**: COMPLETE
 
-- [ ] Task 3.1: Implement `slack_handler.py` base
-- [ ] Task 3.2: Implement Block Kit messages
-- [ ] Task 3.3: Implement button action handlers
-- [ ] Task 3.4: Wire Slack into daemon
-- [ ] Task 3.5: Unit tests for Slack handler
+- [x] Task 3.1: Implement `slack_handler.py` base
+- [x] Task 3.2: Implement Block Kit messages
+- [x] Task 3.3: Implement button action handlers
+- [x] Task 3.4: Wire Slack into daemon
+- [x] Task 3.5: Unit tests for Slack handler (89 tests passing)
 
 ### Milestone 4: Hook Script & Full Integration
 

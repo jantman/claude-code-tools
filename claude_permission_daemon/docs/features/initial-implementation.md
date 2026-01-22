@@ -165,3 +165,160 @@ Note: Python 3.11+ has `tomllib` in stdlib, so no external TOML dependency neede
 
 - Specification: `claude-remote-approve-spec.md`
 - Existing notification script pattern: `claude_notify.sh`
+
+---
+
+# Implementation Plan
+
+## Status: IN PROGRESS
+
+## Dependency Versions (as of 2026-01-22)
+
+Based on PyPI research:
+- **slack-bolt**: 1.27.0 (released 2025-11-13)
+- **aiohttp**: 3.13.3 (released 2026-01-03)
+- **pytest**: 9.x (released 2025-12)
+- **pytest-asyncio**: 1.3.0 (released 2025-11-10)
+- **pytest-cov**: 7.0.0 (released 2025-09-09)
+
+Python 3.14 will be used as specified. Note: `tomllib` is in stdlib since Python 3.11.
+
+## Milestones and Tasks
+
+Commit message prefix format: `Init - {Milestone}.{Task}: {summary}`
+
+### Milestone 1: Project Foundation
+
+**Goal**: Set up project structure, configuration loading, state management, and testing infrastructure.
+
+| Task | Description | Deliverables |
+|------|-------------|--------------|
+| 1.1 | Create project skeleton | `pyproject.toml`, `src/claude_permission_daemon/__init__.py`, directory structure |
+| 1.2 | Implement `config.py` | TOML config loading with env var overrides, validation |
+| 1.3 | Implement `state.py` | `PendingRequest`, `PermissionResponse` dataclasses, `StateManager` class |
+| 1.4 | Create example config | `example/config.toml` with documented options |
+| 1.5 | Set up pytest infrastructure | `tests/conftest.py`, `test_config.py`, `test_state.py` |
+
+**Exit Criteria**: All tests pass, `config.py` and `state.py` fully implemented and tested.
+
+### Milestone 2: Core Components
+
+**Goal**: Implement idle monitoring and socket server components.
+
+| Task | Description | Deliverables |
+|------|-------------|--------------|
+| 2.1 | Implement `idle_monitor.py` | `IdleMonitor` class managing swayidle subprocess, asyncio stream reading, callbacks on state change |
+| 2.2 | Implement `socket_server.py` | Unix domain socket server accepting hook connections, JSON protocol handling |
+| 2.3 | Create basic `daemon.py` shell | Entry point, argument parsing, signal handling, asyncio.gather skeleton |
+| 2.4 | Unit tests for core components | `test_idle_monitor.py`, `test_socket_server.py` with mocked subprocess |
+
+**Exit Criteria**: All tests pass, daemon can start/stop cleanly, idle state changes detected and logged.
+
+### Milestone 3: Slack Integration
+
+**Goal**: Implement Slack Socket Mode connection and message handling.
+
+| Task | Description | Deliverables |
+|------|-------------|--------------|
+| 3.1 | Implement `slack_handler.py` base | `SlackHandler` class with Socket Mode connection, async wrapper |
+| 3.2 | Implement Block Kit messages | `format_permission_request()`, `format_approved()`, `format_denied()`, `format_answered_locally()` |
+| 3.3 | Implement button action handlers | Approve/deny button callbacks with request_id routing |
+| 3.4 | Wire Slack into daemon | Integrate `SlackHandler` into `daemon.py` event loop |
+| 3.5 | Unit tests for Slack handler | `test_slack_handler.py` with mocked Slack client |
+
+**Exit Criteria**: All tests pass, Slack messages can be posted and button actions received.
+
+### Milestone 4: Hook Script & Full Integration
+
+**Goal**: Implement hook script and complete end-to-end integration.
+
+| Task | Description | Deliverables |
+|------|-------------|--------------|
+| 4.1 | Implement `hook.py` | Standalone script (stdlib only), stdin JSON parsing, socket client, timeout handling |
+| 4.2 | Complete daemon orchestration | Wire all callbacks, implement race condition handling |
+| 4.3 | Integration tests | `test_integration.py` with end-to-end scenarios |
+
+**Exit Criteria**: All tests pass, full flow works: hook → daemon → Slack → response → hook output.
+
+### Milestone 5: Deployment & Documentation
+
+**Goal**: Create deployment files and documentation.
+
+| Task | Description | Deliverables |
+|------|-------------|--------------|
+| 5.1 | Create systemd service file | `systemd/claude-permission-daemon.service` |
+| 5.2 | Write project README | Installation instructions, configuration guide, usage examples |
+| 5.3 | Create helper scripts | Install/uninstall scripts (optional) |
+
+**Exit Criteria**: Documentation complete, systemd service file ready for use.
+
+### Milestone 6: Acceptance Criteria
+
+**Goal**: Final validation and documentation.
+
+| Task | Description | Deliverables |
+|------|-------------|--------------|
+| 6.1 | Documentation review | Ensure README.md, all docstrings, and comments are accurate and complete |
+| 6.2 | Test coverage verification | Ensure all code has appropriate unit test coverage |
+| 6.3 | Full test suite pass | All test sessions passing |
+| 6.4 | Move feature to completed | Move this file to `docs/features/completed/` |
+
+**Exit Criteria**: Feature complete, all tests passing, documentation reviewed.
+
+---
+
+## Progress Log
+
+### Milestone 1: Project Foundation
+
+**Status**: NOT STARTED
+
+- [ ] Task 1.1: Create project skeleton
+- [ ] Task 1.2: Implement `config.py`
+- [ ] Task 1.3: Implement `state.py`
+- [ ] Task 1.4: Create example config
+- [ ] Task 1.5: Set up pytest infrastructure
+
+### Milestone 2: Core Components
+
+**Status**: NOT STARTED
+
+- [ ] Task 2.1: Implement `idle_monitor.py`
+- [ ] Task 2.2: Implement `socket_server.py`
+- [ ] Task 2.3: Create basic `daemon.py` shell
+- [ ] Task 2.4: Unit tests for core components
+
+### Milestone 3: Slack Integration
+
+**Status**: NOT STARTED
+
+- [ ] Task 3.1: Implement `slack_handler.py` base
+- [ ] Task 3.2: Implement Block Kit messages
+- [ ] Task 3.3: Implement button action handlers
+- [ ] Task 3.4: Wire Slack into daemon
+- [ ] Task 3.5: Unit tests for Slack handler
+
+### Milestone 4: Hook Script & Full Integration
+
+**Status**: NOT STARTED
+
+- [ ] Task 4.1: Implement `hook.py`
+- [ ] Task 4.2: Complete daemon orchestration
+- [ ] Task 4.3: Integration tests
+
+### Milestone 5: Deployment & Documentation
+
+**Status**: NOT STARTED
+
+- [ ] Task 5.1: Create systemd service file
+- [ ] Task 5.2: Write project README
+- [ ] Task 5.3: Create helper scripts
+
+### Milestone 6: Acceptance Criteria
+
+**Status**: NOT STARTED
+
+- [ ] Task 6.1: Documentation review
+- [ ] Task 6.2: Test coverage verification
+- [ ] Task 6.3: Full test suite pass
+- [ ] Task 6.4: Move feature to completed

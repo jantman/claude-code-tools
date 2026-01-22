@@ -13,6 +13,7 @@ from pathlib import Path
 from . import __version__
 from .config import Config, DEFAULT_CONFIG_PATH
 from .idle_monitor import IdleMonitor
+from .slack_handler import SlackHandler
 from .socket_server import SocketServer, send_response
 from .state import (
     Action,
@@ -38,7 +39,7 @@ class Daemon:
         self._state = StateManager()
         self._idle_monitor: IdleMonitor | None = None
         self._socket_server: SocketServer | None = None
-        self._slack_handler = None  # Will be added in Milestone 3
+        self._slack_handler: SlackHandler | None = None
         self._shutdown_event = asyncio.Event()
         self._tasks: list[asyncio.Task] = []
 
@@ -64,10 +65,18 @@ class Daemon:
         )
         await self._socket_server.start()
 
+        # Start Slack handler
+        self._slack_handler = SlackHandler(
+            config=self._config.slack,
+            on_action=self._handle_slack_action,
+        )
+        await self._slack_handler.start()
+
         # Start component tasks
         self._tasks = [
             asyncio.create_task(self._idle_monitor.run(), name="idle_monitor"),
             asyncio.create_task(self._socket_server.run(), name="socket_server"),
+            asyncio.create_task(self._slack_handler.run(), name="slack_handler"),
         ]
 
         logger.info("Daemon started successfully")
@@ -86,6 +95,8 @@ class Daemon:
         self._tasks.clear()
 
         # Stop components
+        if self._slack_handler:
+            await self._slack_handler.stop()
         if self._socket_server:
             await self._socket_server.stop()
         if self._idle_monitor:
@@ -133,11 +144,15 @@ class Daemon:
         pending = await self._state.get_all_pending_requests()
 
         for p in pending:
-            if p.slack_message_ts:
-                # Request was posted to Slack - update message and passthrough
-                # Slack message update will be implemented in Milestone 3
+            if p.slack_message_ts and p.slack_channel and self._slack_handler:
+                # Request was posted to Slack - update message
                 logger.info(
                     f"Request {p.request_id} answered locally (user returned)"
+                )
+                await self._slack_handler.update_message_answered_locally(
+                    channel=p.slack_channel,
+                    message_ts=p.slack_message_ts,
+                    request=p.request,
                 )
             await self._resolve_request(p.request_id, Action.PASSTHROUGH, "User active locally")
 
@@ -175,18 +190,67 @@ class Daemon:
             )
             return
 
-        # User is idle - will post to Slack (implemented in Milestone 3)
-        # For now, just passthrough
-        logger.info(
-            f"User idle, would post to Slack for request {request.request_id}"
-        )
-        # TODO: Post to Slack and wait for response
-        # For now, passthrough since Slack isn't implemented yet
-        await self._resolve_request(
-            request.request_id,
-            Action.PASSTHROUGH,
-            "Slack integration not yet implemented",
-        )
+        # User is idle - post to Slack
+        if not self._slack_handler:
+            logger.error("Slack handler not available, passing through")
+            await self._resolve_request(
+                request.request_id,
+                Action.PASSTHROUGH,
+                "Slack handler not available",
+            )
+            return
+
+        logger.info(f"User idle, posting to Slack for request {request.request_id}")
+        result = await self._slack_handler.post_permission_request(pending)
+
+        if result is None:
+            # Failed to post to Slack - passthrough
+            logger.error("Failed to post to Slack, passing through")
+            await self._resolve_request(
+                request.request_id,
+                Action.PASSTHROUGH,
+                "Failed to post to Slack",
+            )
+            return
+
+        # Update pending request with Slack message info
+        message_ts, channel = result
+        await self._state.update_slack_info(request.request_id, message_ts, channel)
+        logger.info(f"Request {request.request_id} posted to Slack, awaiting response")
+
+    async def _handle_slack_action(self, request_id: str, action: Action) -> None:
+        """Handle an action from Slack (approve/deny button click).
+
+        Args:
+            request_id: ID of the request being acted on.
+            action: The action taken (APPROVE or DENY).
+        """
+        pending = await self._state.get_pending_request(request_id)
+        if not pending:
+            logger.warning(f"Received Slack action for unknown request: {request_id}")
+            return
+
+        # Update the Slack message
+        if pending.slack_message_ts and pending.slack_channel and self._slack_handler:
+            if action == Action.APPROVE:
+                await self._slack_handler.update_message_approved(
+                    channel=pending.slack_channel,
+                    message_ts=pending.slack_message_ts,
+                    request=pending.request,
+                )
+                reason = "Approved via Slack"
+            else:
+                await self._slack_handler.update_message_denied(
+                    channel=pending.slack_channel,
+                    message_ts=pending.slack_message_ts,
+                    request=pending.request,
+                )
+                reason = "Denied via Slack"
+        else:
+            reason = f"{action.value.capitalize()}d via Slack"
+
+        # Resolve the request
+        await self._resolve_request(request_id, action, reason)
 
     async def _resolve_request(
         self,

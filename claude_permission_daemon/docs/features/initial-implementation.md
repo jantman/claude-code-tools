@@ -271,13 +271,13 @@ Commit message prefix format: `Init - {Milestone}.{Task}: {summary}`
 
 ### Milestone 1: Project Foundation
 
-**Status**: NOT STARTED
+**Status**: COMPLETE
 
-- [ ] Task 1.1: Create project skeleton
-- [ ] Task 1.2: Implement `config.py`
-- [ ] Task 1.3: Implement `state.py`
-- [ ] Task 1.4: Create example config
-- [ ] Task 1.5: Set up pytest infrastructure
+- [x] Task 1.1: Create project skeleton
+- [x] Task 1.2: Implement `config.py`
+- [x] Task 1.3: Implement `state.py`
+- [x] Task 1.4: Create example config
+- [x] Task 1.5: Set up pytest infrastructure (39 tests passing)
 
 ### Milestone 2: Core Components
 

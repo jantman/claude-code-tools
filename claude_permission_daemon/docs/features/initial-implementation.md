@@ -281,12 +281,12 @@ Commit message prefix format: `Init - {Milestone}.{Task}: {summary}`
 
 ### Milestone 2: Core Components
 
-**Status**: NOT STARTED
+**Status**: COMPLETE
 
-- [ ] Task 2.1: Implement `idle_monitor.py`
-- [ ] Task 2.2: Implement `socket_server.py`
-- [ ] Task 2.3: Create basic `daemon.py` shell
-- [ ] Task 2.4: Unit tests for core components
+- [x] Task 2.1: Implement `idle_monitor.py`
+- [x] Task 2.2: Implement `socket_server.py`
+- [x] Task 2.3: Create basic `daemon.py` shell
+- [x] Task 2.4: Unit tests for core components (69 tests passing)
 
 ### Milestone 3: Slack Integration
 

@@ -262,3 +262,180 @@ class TestDaemonStartStop:
         daemon.request_shutdown()
 
         assert daemon._shutdown_event.is_set()
+
+
+class TestDaemonPermissionHandling:
+    """Tests for permission request handling."""
+
+    async def test_handle_request_active_user_passthrough(
+        self, test_config: Config
+    ) -> None:
+        """Test that active user gets passthrough immediately."""
+        daemon = Daemon(test_config)
+
+        # User is active (default state)
+        assert not daemon._state.idle
+
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "echo test"})
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await daemon._handle_permission_request(request, mock_writer)
+
+            # Should send passthrough immediately
+            mock_send.assert_called_once()
+            response = mock_send.call_args[0][1]
+            assert response.action == Action.PASSTHROUGH
+            assert "User active" in response.reason
+
+    async def test_handle_request_idle_user_posts_to_slack(
+        self, test_config: Config
+    ) -> None:
+        """Test that idle user gets request posted to Slack."""
+        daemon = Daemon(test_config)
+
+        # Set user to idle
+        await daemon._state.set_idle(True)
+
+        # Create mock Slack handler
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.post_permission_request = AsyncMock(
+            return_value=("1234567890.123456", "C12345678")
+        )
+        daemon._slack_handler = mock_slack_handler
+
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "echo test"})
+
+        await daemon._handle_permission_request(request, mock_writer)
+
+        # Should post to Slack
+        mock_slack_handler.post_permission_request.assert_called_once()
+
+        # Should update pending request with Slack info
+        pending = await daemon._state.get_pending_request(request.request_id)
+        assert pending is not None
+        assert pending.slack_message_ts == "1234567890.123456"
+        assert pending.slack_channel == "C12345678"
+
+    async def test_handle_request_idle_slack_failure_passthrough(
+        self, test_config: Config
+    ) -> None:
+        """Test that Slack failure results in passthrough."""
+        daemon = Daemon(test_config)
+
+        # Set user to idle
+        await daemon._state.set_idle(True)
+
+        # Create mock Slack handler that fails
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.post_permission_request = AsyncMock(return_value=None)
+        daemon._slack_handler = mock_slack_handler
+
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "echo test"})
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await daemon._handle_permission_request(request, mock_writer)
+
+            # Should send passthrough
+            mock_send.assert_called_once()
+            response = mock_send.call_args[0][1]
+            assert response.action == Action.PASSTHROUGH
+            assert "Failed to post to Slack" in response.reason
+
+    async def test_handle_request_idle_no_slack_handler_passthrough(
+        self, test_config: Config
+    ) -> None:
+        """Test that missing Slack handler results in passthrough."""
+        daemon = Daemon(test_config)
+
+        # Set user to idle but no Slack handler
+        await daemon._state.set_idle(True)
+        daemon._slack_handler = None
+
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "echo test"})
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await daemon._handle_permission_request(request, mock_writer)
+
+            # Should send passthrough
+            mock_send.assert_called_once()
+            response = mock_send.call_args[0][1]
+            assert response.action == Action.PASSTHROUGH
+            assert "Slack handler not available" in response.reason
+
+    async def test_resolve_request_approve(self, test_config: Config) -> None:
+        """Test resolving a request with approve."""
+        daemon = Daemon(test_config)
+
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "test"})
+        pending = PendingRequest(request=request, hook_writer=mock_writer)
+        await daemon._state.add_pending_request(pending)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await daemon._resolve_request(
+                request.request_id, Action.APPROVE, "Test approve"
+            )
+
+            mock_send.assert_called_once()
+            response = mock_send.call_args[0][1]
+            assert response.action == Action.APPROVE
+            assert response.reason == "Test approve"
+
+        # Request should be removed
+        assert await daemon._state.get_pending_request(request.request_id) is None
+
+    async def test_resolve_request_deny(self, test_config: Config) -> None:
+        """Test resolving a request with deny."""
+        daemon = Daemon(test_config)
+
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "test"})
+        pending = PendingRequest(request=request, hook_writer=mock_writer)
+        await daemon._state.add_pending_request(pending)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await daemon._resolve_request(
+                request.request_id, Action.DENY, "Test deny"
+            )
+
+            mock_send.assert_called_once()
+            response = mock_send.call_args[0][1]
+            assert response.action == Action.DENY
+            assert response.reason == "Test deny"
+
+    async def test_resolve_request_unknown_id_no_error(
+        self, test_config: Config
+    ) -> None:
+        """Test resolving unknown request doesn't raise error."""
+        daemon = Daemon(test_config)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            # Should not raise
+            await daemon._resolve_request(
+                "unknown-id", Action.APPROVE, "Test"
+            )
+
+            # Should not call send_response
+            mock_send.assert_not_called()

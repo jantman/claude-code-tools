@@ -705,3 +705,121 @@ class TestDaemonIdleStateChange:
 
             # Should not send any response
             mock_send.assert_not_called()
+
+
+class TestHelperFunctions:
+    """Tests for module-level helper functions."""
+
+    def test_setup_logging_default(self) -> None:
+        """Test setup_logging with default (INFO level)."""
+        import logging
+
+        # Clear any existing handlers
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(debug=False)
+
+        assert root_logger.level == logging.INFO
+
+    def test_setup_logging_debug(self) -> None:
+        """Test setup_logging with debug mode."""
+        import logging
+
+        # Clear any existing handlers
+        root_logger = logging.getLogger()
+        root_logger.handlers.clear()
+
+        setup_logging(debug=True)
+
+        assert root_logger.level == logging.DEBUG
+
+    def test_setup_logging_reduces_third_party_noise(self) -> None:
+        """Test that setup_logging sets third-party loggers to WARNING."""
+        import logging
+
+        setup_logging(debug=False)
+
+        slack_bolt_logger = logging.getLogger("slack_bolt")
+        slack_sdk_logger = logging.getLogger("slack_sdk")
+
+        assert slack_bolt_logger.level == logging.WARNING
+        assert slack_sdk_logger.level == logging.WARNING
+
+    def test_parse_args_defaults(self) -> None:
+        """Test parse_args with no arguments."""
+        import sys
+        from claude_permission_daemon.config import DEFAULT_CONFIG_PATH
+
+        original_argv = sys.argv
+        sys.argv = ["claude-permission-daemon"]
+        try:
+            args = parse_args()
+            assert args.config == DEFAULT_CONFIG_PATH
+            assert args.debug is False
+        finally:
+            sys.argv = original_argv
+
+    def test_parse_args_config_short(self) -> None:
+        """Test parse_args with -c config option."""
+        import sys
+        from pathlib import Path
+
+        original_argv = sys.argv
+        sys.argv = ["claude-permission-daemon", "-c", "/custom/config.toml"]
+        try:
+            args = parse_args()
+            assert args.config == Path("/custom/config.toml")
+        finally:
+            sys.argv = original_argv
+
+    def test_parse_args_config_long(self) -> None:
+        """Test parse_args with --config option."""
+        import sys
+        from pathlib import Path
+
+        original_argv = sys.argv
+        sys.argv = ["claude-permission-daemon", "--config", "/other/config.toml"]
+        try:
+            args = parse_args()
+            assert args.config == Path("/other/config.toml")
+        finally:
+            sys.argv = original_argv
+
+    def test_parse_args_debug_short(self) -> None:
+        """Test parse_args with -d debug option."""
+        import sys
+
+        original_argv = sys.argv
+        sys.argv = ["claude-permission-daemon", "-d"]
+        try:
+            args = parse_args()
+            assert args.debug is True
+        finally:
+            sys.argv = original_argv
+
+    def test_parse_args_debug_long(self) -> None:
+        """Test parse_args with --debug option."""
+        import sys
+
+        original_argv = sys.argv
+        sys.argv = ["claude-permission-daemon", "--debug"]
+        try:
+            args = parse_args()
+            assert args.debug is True
+        finally:
+            sys.argv = original_argv
+
+    def test_parse_args_combined(self) -> None:
+        """Test parse_args with multiple options."""
+        import sys
+        from pathlib import Path
+
+        original_argv = sys.argv
+        sys.argv = ["claude-permission-daemon", "-d", "-c", "/test/config.toml"]
+        try:
+            args = parse_args()
+            assert args.debug is True
+            assert args.config == Path("/test/config.toml")
+        finally:
+            sys.argv = original_argv

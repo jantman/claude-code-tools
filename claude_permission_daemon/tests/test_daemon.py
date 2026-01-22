@@ -439,3 +439,124 @@ class TestDaemonPermissionHandling:
 
             # Should not call send_response
             mock_send.assert_not_called()
+
+
+class TestDaemonSlackActionHandling:
+    """Tests for Slack action handling."""
+
+    async def test_handle_slack_action_approve(self, test_config: Config) -> None:
+        """Test handling Slack approve action."""
+        daemon = Daemon(test_config)
+
+        # Create mock Slack handler
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.update_message_approved = AsyncMock()
+        daemon._slack_handler = mock_slack_handler
+
+        # Add pending request with Slack info
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "test"})
+        pending = PendingRequest(
+            request=request,
+            hook_writer=mock_writer,
+            slack_message_ts="1234567890.123456",
+            slack_channel="C12345678",
+        )
+        await daemon._state.add_pending_request(pending)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await daemon._handle_slack_action(request.request_id, Action.APPROVE)
+
+            # Should update Slack message
+            mock_slack_handler.update_message_approved.assert_called_once_with(
+                channel="C12345678",
+                message_ts="1234567890.123456",
+                request=request,
+            )
+
+            # Should send approve response
+            mock_send.assert_called_once()
+            response = mock_send.call_args[0][1]
+            assert response.action == Action.APPROVE
+            assert "Approved via Slack" in response.reason
+
+    async def test_handle_slack_action_deny(self, test_config: Config) -> None:
+        """Test handling Slack deny action."""
+        daemon = Daemon(test_config)
+
+        # Create mock Slack handler
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.update_message_denied = AsyncMock()
+        daemon._slack_handler = mock_slack_handler
+
+        # Add pending request with Slack info
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "rm -rf /"})
+        pending = PendingRequest(
+            request=request,
+            hook_writer=mock_writer,
+            slack_message_ts="1234567890.123456",
+            slack_channel="C12345678",
+        )
+        await daemon._state.add_pending_request(pending)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await daemon._handle_slack_action(request.request_id, Action.DENY)
+
+            # Should update Slack message
+            mock_slack_handler.update_message_denied.assert_called_once_with(
+                channel="C12345678",
+                message_ts="1234567890.123456",
+                request=request,
+            )
+
+            # Should send deny response
+            mock_send.assert_called_once()
+            response = mock_send.call_args[0][1]
+            assert response.action == Action.DENY
+            assert "Denied via Slack" in response.reason
+
+    async def test_handle_slack_action_unknown_request(
+        self, test_config: Config
+    ) -> None:
+        """Test handling Slack action for unknown request."""
+        daemon = Daemon(test_config)
+
+        # No pending request with this ID
+        await daemon._handle_slack_action("unknown-id", Action.APPROVE)
+
+        # Should not raise - just log warning
+
+    async def test_handle_slack_action_no_slack_info(
+        self, test_config: Config
+    ) -> None:
+        """Test handling Slack action when request has no Slack info."""
+        daemon = Daemon(test_config)
+        daemon._slack_handler = MagicMock()
+
+        # Add pending request without Slack info
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "test"})
+        pending = PendingRequest(
+            request=request,
+            hook_writer=mock_writer,
+            # No slack_message_ts or slack_channel
+        )
+        await daemon._state.add_pending_request(pending)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            await daemon._handle_slack_action(request.request_id, Action.APPROVE)
+
+            # Should still send response
+            mock_send.assert_called_once()
+            response = mock_send.call_args[0][1]
+            assert response.action == Action.APPROVE

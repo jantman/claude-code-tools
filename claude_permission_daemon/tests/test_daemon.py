@@ -560,3 +560,148 @@ class TestDaemonSlackActionHandling:
             mock_send.assert_called_once()
             response = mock_send.call_args[0][1]
             assert response.action == Action.APPROVE
+
+
+class TestDaemonIdleStateChange:
+    """Tests for idle state change handling (race condition logic)."""
+
+    async def test_on_idle_change_to_idle_does_nothing(
+        self, test_config: Config
+    ) -> None:
+        """Test that going idle doesn't resolve pending requests."""
+        daemon = Daemon(test_config)
+
+        # Add a pending request
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "test"})
+        pending = PendingRequest(request=request, hook_writer=mock_writer)
+        await daemon._state.add_pending_request(pending)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            # Go idle
+            await daemon._on_idle_change(True)
+
+            # Should not send any response
+            mock_send.assert_not_called()
+
+            # Request should still be pending
+            assert await daemon._state.get_pending_request(request.request_id) is not None
+
+    async def test_on_idle_change_to_active_resolves_pending(
+        self, test_config: Config
+    ) -> None:
+        """Test that becoming active resolves pending requests with passthrough."""
+        daemon = Daemon(test_config)
+
+        # Add a pending request (no Slack info - just tracked)
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "test"})
+        pending = PendingRequest(request=request, hook_writer=mock_writer)
+        await daemon._state.add_pending_request(pending)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            # Become active
+            await daemon._on_idle_change(False)
+
+            # Should send passthrough
+            mock_send.assert_called_once()
+            response = mock_send.call_args[0][1]
+            assert response.action == Action.PASSTHROUGH
+            assert "User active" in response.reason
+
+    async def test_on_idle_change_to_active_updates_slack_message(
+        self, test_config: Config
+    ) -> None:
+        """Test that becoming active updates Slack message to 'answered locally'."""
+        daemon = Daemon(test_config)
+
+        # Create mock Slack handler
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.update_message_answered_locally = AsyncMock()
+        daemon._slack_handler = mock_slack_handler
+
+        # Add pending request with Slack info
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "test"})
+        pending = PendingRequest(
+            request=request,
+            hook_writer=mock_writer,
+            slack_message_ts="1234567890.123456",
+            slack_channel="C12345678",
+        )
+        await daemon._state.add_pending_request(pending)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ):
+            # Become active
+            await daemon._on_idle_change(False)
+
+            # Should update Slack message
+            mock_slack_handler.update_message_answered_locally.assert_called_once_with(
+                channel="C12345678",
+                message_ts="1234567890.123456",
+                request=request,
+            )
+
+    async def test_on_idle_change_to_active_multiple_pending(
+        self, test_config: Config
+    ) -> None:
+        """Test that becoming active resolves all pending requests."""
+        daemon = Daemon(test_config)
+
+        # Create mock Slack handler
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.update_message_answered_locally = AsyncMock()
+        daemon._slack_handler = mock_slack_handler
+
+        # Add multiple pending requests
+        requests = []
+        for i in range(3):
+            mock_writer = MagicMock()
+            request = PermissionRequest.create(f"Tool{i}", {})
+            pending = PendingRequest(
+                request=request,
+                hook_writer=mock_writer,
+                slack_message_ts=f"123456789{i}.123456",
+                slack_channel="C12345678",
+            )
+            await daemon._state.add_pending_request(pending)
+            requests.append(request)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            # Become active
+            await daemon._on_idle_change(False)
+
+            # Should send passthrough for all 3
+            assert mock_send.call_count == 3
+
+            # Should update Slack for all 3
+            assert mock_slack_handler.update_message_answered_locally.call_count == 3
+
+    async def test_on_idle_change_to_active_no_pending(
+        self, test_config: Config
+    ) -> None:
+        """Test that becoming active with no pending requests is fine."""
+        daemon = Daemon(test_config)
+
+        # No pending requests
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ) as mock_send:
+            # Become active - should not raise
+            await daemon._on_idle_change(False)
+
+            # Should not send any response
+            mock_send.assert_not_called()

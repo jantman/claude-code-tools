@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(echo:*)",
+      "Bash(find:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run watch:*)",
+      "Bash(git add:*)",
+      "Bash(git checkout:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(grep:*)",
+      "Bash(pgrep:*)",
+      "Bash(poetry install:*)",
+      "Bash(poetry lock:*)",
+      "Bash(poetry run mypy:*)",
+      "Bash(poetry run nox --keywords:*)",
+      "Bash(poetry run nox --sessions:*)",
+      "Bash(poetry run nox -k:*)",
+      "Bash(poetry run nox -s:*)",
+      "Bash(poetry run nox:*)",
+      "Bash(poetry run pytest:*)",
+      "Bash(poetry run:*)",
+      "Bash(rg:*)",
+      "Bash(tee:*)",
+      "Bash(tree:*)",
+      "mcp__github__create_pull_request",
+      "mcp__github__pull_request_read",
+      "Skill(independent)"
+    ]
+  }
+}

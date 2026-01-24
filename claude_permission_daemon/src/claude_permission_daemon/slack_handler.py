@@ -89,7 +89,12 @@ class SlackHandler:
         self._running = False
 
         if self._handler:
-            await self._handler.close_async()
+            try:
+                await asyncio.wait_for(self._handler.close_async(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Slack handler close timed out after 5s")
+            except Exception:
+                logger.exception("Error closing Slack handler")
             self._handler = None
 
         self._app = None

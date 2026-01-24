@@ -88,23 +88,35 @@ class Daemon:
         logger.info("Stopping daemon...")
 
         # Cancel all tasks
+        logger.debug("Cancelling tasks...")
         for task in self._tasks:
             task.cancel()
 
-        # Wait for tasks to complete
+        # Wait for tasks to complete with timeout
         if self._tasks:
-            await asyncio.gather(*self._tasks, return_exceptions=True)
+            logger.debug("Waiting for tasks to complete...")
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self._tasks, return_exceptions=True),
+                    timeout=10.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Timed out waiting for tasks to cancel")
         self._tasks.clear()
 
         # Stop components
+        logger.debug("Stopping Slack handler...")
         if self._slack_handler:
             await self._slack_handler.stop()
+        logger.debug("Stopping socket server...")
         if self._socket_server:
             await self._socket_server.stop()
+        logger.debug("Stopping idle monitor...")
         if self._idle_monitor:
             await self._idle_monitor.stop()
 
         # Send passthrough to any remaining pending requests
+        logger.debug("Clearing pending requests...")
         pending = await self._state.clear_all_pending()
         for p in pending:
             await self._send_passthrough(p)

@@ -115,13 +115,16 @@ class SocketServer:
         if not self._running:
             return
 
+        logger.info("Stopping SocketServer...")
         self._running = False
 
-        # Close all active connections
+        # Close all active connections with timeout
         for writer in list(self._active_connections):
             try:
                 writer.close()
-                await writer.wait_closed()
+                await asyncio.wait_for(writer.wait_closed(), timeout=2.0)
+            except asyncio.TimeoutError:
+                logger.warning("Connection close timed out")
             except Exception:
                 pass
         self._active_connections.clear()
@@ -129,7 +132,10 @@ class SocketServer:
         # Stop the server
         if self._server:
             self._server.close()
-            await self._server.wait_closed()
+            try:
+                await asyncio.wait_for(self._server.wait_closed(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("Server close timed out after 5s")
             self._server = None
 
         # Remove socket file

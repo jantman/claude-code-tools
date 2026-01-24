@@ -1,17 +1,19 @@
 # Claude Permission Daemon
 
-Remote approval of Claude Code permission requests via Slack when the user is idle.
+Remote approval of Claude Code permission requests and notifications via Slack when the user is idle.
 
 ## Overview
 
-When you step away from your computer while Claude Code is running, permission requests would normally block until you return. This daemon detects when you're idle (using swayidle) and forwards permission requests to Slack where you can approve or deny them from your phone.
+When you step away from your computer while Claude Code is running, permission requests would normally block until you return. This daemon detects when you're idle (using swayidle) and forwards permission requests to Slack where you can approve or deny them from your phone. It also forwards Claude Code notifications (like "waiting for input") to Slack when you're idle.
 
 **Key features:**
 - Idle detection via swayidle (Wayland)
 - Slack Socket Mode for real-time notifications
-- Approve/deny buttons in Slack messages
+- Approve/deny buttons for permission requests
+- One-way notifications (idle prompts, auth events, etc.)
 - Automatic passthrough when you return to your computer
 - Clean race condition handling
+- Idle/active duration tracking in logs
 
 ## Requirements
 
@@ -96,9 +98,20 @@ Add to `~/.claude/settings.json` (use the full path to the hook in your virtuale
 ```json
 {
     "hooks": {
-        "PermissionRequest": [
+        "PreToolUse": [
             {
-                "matcher": "*",
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "~/.local/share/claude-permission-daemon/venv/bin/claude-permission-hook"
+                    }
+                ]
+            }
+        ],
+        "Notification": [
+            {
+                "matcher": "",
                 "hooks": [
                     {
                         "type": "command",
@@ -110,6 +123,8 @@ Add to `~/.claude/settings.json` (use the full path to the hook in your virtuale
     }
 }
 ```
+
+**Note:** The `Notification` hook is optional. If configured, you'll receive Slack notifications when Claude is waiting for input (idle prompt) or other events occur while you're away. `permission_prompt` notifications are automatically filtered out since they're already handled by the permission request system.
 
 ## Configuration Reference
 
@@ -155,12 +170,22 @@ All config values can be overridden with environment variables:
 
 ## How It Works
 
+### Permission Requests
+
 1. Claude Code invokes `claude-permission-hook` for each permission request
 2. The hook connects to the daemon via Unix socket
 3. If you're **active**: daemon returns passthrough → normal local prompt appears
 4. If you're **idle**: daemon posts to Slack with Approve/Deny buttons
 5. You tap a button → daemon sends response → Claude Code proceeds
 6. If you **return** while a request is pending: message updates to "Answered Locally" → local prompt appears
+
+### Notifications
+
+1. Claude Code invokes `claude-permission-hook` for notifications (idle prompts, etc.)
+2. The hook connects to the daemon and sends the notification (one-way, no response)
+3. If you're **active**: notification is logged but not sent to Slack
+4. If you're **idle**: notification is posted to Slack as an info message (no buttons)
+5. `permission_prompt` notifications are filtered out (handled by permission system)
 
 ## Troubleshooting
 
@@ -208,8 +233,14 @@ python3.14 -m venv .venv
 
 ### Testing the hook directly
 
+Permission request:
 ```bash
 echo '{"tool_name":"Bash","tool_input":{"command":"echo test"}}' | .venv/bin/claude-permission-hook
+```
+
+Notification:
+```bash
+echo '{"hook_event_name":"Notification","notification_type":"idle_prompt","message":"Claude is waiting for input"}' | .venv/bin/claude-permission-hook
 ```
 
 ## License

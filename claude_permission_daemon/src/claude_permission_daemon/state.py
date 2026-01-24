@@ -87,6 +87,7 @@ class StateManager:
 
     def __init__(self) -> None:
         self._idle: bool = False
+        self._idle_since: datetime = datetime.now(UTC)
         self._pending_requests: dict[str, PendingRequest] = {}
         self._lock = asyncio.Lock()
         self._idle_callbacks: list[IdleStateCallback] = []
@@ -95,6 +96,36 @@ class StateManager:
     def idle(self) -> bool:
         """Current idle state."""
         return self._idle
+
+    @property
+    def idle_since(self) -> datetime:
+        """Timestamp when the current idle/active state started."""
+        return self._idle_since
+
+    @property
+    def state_duration_seconds(self) -> float:
+        """How long (in seconds) the user has been in the current state."""
+        return (datetime.now(UTC) - self._idle_since).total_seconds()
+
+    def get_state_description(self) -> str:
+        """Get a human-readable description of current state and duration.
+
+        Returns:
+            String like "active for 5m 30s" or "idle for 2m 15s".
+        """
+        duration = self.state_duration_seconds
+        state_str = "idle" if self._idle else "active"
+
+        if duration < 60:
+            return f"{state_str} for {int(duration)}s"
+        elif duration < 3600:
+            minutes = int(duration // 60)
+            seconds = int(duration % 60)
+            return f"{state_str} for {minutes}m {seconds}s"
+        else:
+            hours = int(duration // 3600)
+            minutes = int((duration % 3600) // 60)
+            return f"{state_str} for {hours}h {minutes}m"
 
     def register_idle_callback(self, callback: IdleStateCallback) -> None:
         """Register a callback to be called when idle state changes.
@@ -109,8 +140,15 @@ class StateManager:
             if self._idle == idle:
                 return
             old_state = self._idle
+            old_duration = self.state_duration_seconds
             self._idle = idle
-            logger.info(f"Idle state changed: {old_state} -> {idle}")
+            self._idle_since = datetime.now(UTC)
+            old_state_str = "idle" if old_state else "active"
+            new_state_str = "idle" if idle else "active"
+            logger.info(
+                f"Idle state changed: {old_state_str} -> {new_state_str} "
+                f"(was {old_state_str} for {old_duration:.1f}s)"
+            )
 
         # Call callbacks outside the lock to avoid deadlocks
         for callback in self._idle_callbacks:

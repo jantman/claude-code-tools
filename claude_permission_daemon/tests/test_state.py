@@ -1,8 +1,8 @@
 """Tests for state module."""
 
 import asyncio
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -297,3 +297,92 @@ class TestStateManager:
         # All should be gone
         all_pending = await state_manager.get_all_pending_requests()
         assert len(all_pending) == 0
+
+    async def test_idle_since_initial(self, state_manager: StateManager) -> None:
+        """Test idle_since is set on initialization."""
+        # Should be close to now
+        now = datetime.now(UTC)
+        assert (now - state_manager.idle_since).total_seconds() < 1
+
+    async def test_idle_since_updates_on_state_change(
+        self, state_manager: StateManager
+    ) -> None:
+        """Test idle_since updates when state changes."""
+        initial_since = state_manager.idle_since
+
+        # Small delay to ensure time difference
+        await asyncio.sleep(0.01)
+
+        await state_manager.set_idle(True)
+        assert state_manager.idle_since > initial_since
+
+        idle_since = state_manager.idle_since
+        await asyncio.sleep(0.01)
+
+        await state_manager.set_idle(False)
+        assert state_manager.idle_since > idle_since
+
+    async def test_idle_since_unchanged_when_state_unchanged(
+        self, state_manager: StateManager
+    ) -> None:
+        """Test idle_since doesn't change when setting same state."""
+        await state_manager.set_idle(True)
+        idle_since = state_manager.idle_since
+
+        await asyncio.sleep(0.01)
+        await state_manager.set_idle(True)  # Same state
+
+        assert state_manager.idle_since == idle_since
+
+    async def test_state_duration_seconds(self, state_manager: StateManager) -> None:
+        """Test state_duration_seconds returns time since last change."""
+        # Wait a bit
+        await asyncio.sleep(0.05)
+        duration = state_manager.state_duration_seconds
+        assert duration >= 0.05
+
+    async def test_get_state_description_seconds(
+        self, state_manager: StateManager
+    ) -> None:
+        """Test get_state_description for short durations."""
+        # Mock the datetime to control duration
+        fixed_time = datetime.now(UTC)
+        with patch.object(
+            state_manager, "_idle_since", fixed_time - timedelta(seconds=30)
+        ):
+            desc = state_manager.get_state_description()
+            assert "active for 30s" in desc
+
+    async def test_get_state_description_minutes(
+        self, state_manager: StateManager
+    ) -> None:
+        """Test get_state_description for minute durations."""
+        fixed_time = datetime.now(UTC)
+        with patch.object(
+            state_manager, "_idle_since", fixed_time - timedelta(minutes=5, seconds=30)
+        ):
+            desc = state_manager.get_state_description()
+            assert "active for 5m 30s" in desc
+
+    async def test_get_state_description_hours(
+        self, state_manager: StateManager
+    ) -> None:
+        """Test get_state_description for hour durations."""
+        fixed_time = datetime.now(UTC)
+        with patch.object(
+            state_manager, "_idle_since", fixed_time - timedelta(hours=2, minutes=15)
+        ):
+            desc = state_manager.get_state_description()
+            assert "active for 2h 15m" in desc
+
+    async def test_get_state_description_idle_state(
+        self, state_manager: StateManager
+    ) -> None:
+        """Test get_state_description shows 'idle' when idle."""
+        await state_manager.set_idle(True)
+        fixed_time = datetime.now(UTC)
+        with patch.object(
+            state_manager, "_idle_since", fixed_time - timedelta(seconds=45)
+        ):
+            desc = state_manager.get_state_description()
+            assert "idle for 45s" in desc

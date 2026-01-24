@@ -180,9 +180,12 @@ class Daemon:
         await self._state.add_pending_request(pending)
 
         # Check if user is idle
+        state_desc = self._state.get_state_description()
         if not self._state.idle:
             # User is active - passthrough immediately
-            logger.info(f"User active, passing through request {request.request_id}")
+            logger.info(
+                f"User {state_desc}, passing through request {request.request_id}"
+            )
             await self._resolve_request(
                 request.request_id,
                 Action.PASSTHROUGH,
@@ -192,7 +195,9 @@ class Daemon:
 
         # User is idle - post to Slack
         if not self._slack_handler:
-            logger.error("Slack handler not available, passing through")
+            logger.error(
+                f"User {state_desc}, but Slack handler not available, passing through"
+            )
             await self._resolve_request(
                 request.request_id,
                 Action.PASSTHROUGH,
@@ -200,7 +205,9 @@ class Daemon:
             )
             return
 
-        logger.info(f"User idle, posting to Slack for request {request.request_id}")
+        logger.info(
+            f"User {state_desc}, posting to Slack for request {request.request_id}"
+        )
         result = await self._slack_handler.post_permission_request(pending)
 
         if result is None:

@@ -12,7 +12,7 @@ from slack_bolt.async_app import AsyncApp
 from slack_sdk.web.async_client import AsyncWebClient
 
 from .config import SlackConfig
-from .state import Action, PendingRequest, PermissionRequest
+from .state import Action, Notification, PendingRequest, PermissionRequest
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +220,42 @@ class SlackHandler:
             )
         except Exception:
             logger.exception("Failed to update Slack message (answered locally)")
+
+    async def post_notification(self, notification: Notification) -> bool:
+        """Post a notification message to Slack.
+
+        Unlike permission requests, notifications don't have buttons and
+        don't expect a response. They are info-only messages.
+
+        Args:
+            notification: The notification to post.
+
+        Returns:
+            True if successfully posted, False otherwise.
+        """
+        if not self._app:
+            logger.error("Cannot post notification: Slack not connected")
+            return False
+
+        blocks = format_notification(notification)
+
+        try:
+            client: AsyncWebClient = self._app.client
+            await client.chat_postMessage(
+                channel=self._config.channel,
+                text=f"Notification: {notification.notification_type}",
+                blocks=blocks,
+            )
+
+            logger.info(
+                f"Posted notification {notification.notification_id} "
+                f"type={notification.notification_type} to Slack"
+            )
+            return True
+
+        except Exception:
+            logger.exception("Failed to post notification to Slack")
+            return False
 
     async def _handle_approve(self, ack, body) -> None:
         """Handle approve button click.
@@ -499,3 +535,76 @@ def format_answered_locally(request: PermissionRequest) -> list[dict]:
             ],
         },
     ]
+
+
+# Emoji mapping for notification types
+NOTIFICATION_TYPE_EMOJI = {
+    "idle_prompt": "⏳",
+    "auth_success": "🔑",
+    "elicitation_dialog": "💬",
+}
+
+
+def format_notification(notification: Notification) -> list[dict]:
+    """Format a notification as Slack Block Kit blocks.
+
+    Notifications are info-only messages without action buttons.
+
+    Args:
+        notification: The notification to format.
+
+    Returns:
+        List of Slack Block Kit block dicts.
+    """
+    # Get emoji for notification type
+    emoji = NOTIFICATION_TYPE_EMOJI.get(notification.notification_type, "📢")
+
+    # Format the notification type for display
+    type_display = notification.notification_type.replace("_", " ").title()
+
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"{emoji} Claude Code: {type_display}",
+                "emoji": True,
+            },
+        },
+    ]
+
+    # Add message if present
+    if notification.message:
+        # Truncate long messages
+        message = notification.message
+        if len(message) > 500:
+            message = message[:500] + "..."
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": message,
+            },
+        })
+
+    # Add context with timestamp and optional cwd
+    context_parts = [f"Received at {notification.timestamp.strftime('%H:%M:%S')}"]
+    if notification.cwd:
+        # Show just the last part of the path for brevity
+        cwd_display = notification.cwd
+        if len(cwd_display) > 50:
+            cwd_display = "..." + cwd_display[-47:]
+        context_parts.append(f"in `{cwd_display}`")
+
+    blocks.append({
+        "type": "context",
+        "elements": [
+            {
+                "type": "mrkdwn",
+                "text": " • ".join(context_parts),
+            },
+        ],
+    })
+
+    return blocks

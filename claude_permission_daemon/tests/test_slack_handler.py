@@ -8,13 +8,20 @@ import pytest
 
 from claude_permission_daemon.config import SlackConfig
 from claude_permission_daemon.slack_handler import (
+    NOTIFICATION_TYPE_EMOJI,
     SlackHandler,
     format_answered_locally,
     format_approved,
     format_denied,
+    format_notification,
     format_permission_request,
 )
-from claude_permission_daemon.state import Action, PendingRequest, PermissionRequest
+from claude_permission_daemon.state import (
+    Action,
+    Notification,
+    PendingRequest,
+    PermissionRequest,
+)
 
 
 class TestFormatPermissionRequest:
@@ -407,3 +414,194 @@ class TestSlackHandlerWithMockedApp:
         await handler.update_message_approved("C123", "ts", request)
         await handler.update_message_denied("C123", "ts", request)
         await handler.update_message_answered_locally("C123", "ts", request)
+
+    async def test_post_notification_success(self, config: SlackConfig) -> None:
+        """Test successful notification posting."""
+        handler = SlackHandler(config=config, on_action=AsyncMock())
+
+        mock_client = AsyncMock()
+        mock_client.chat_postMessage.return_value = {
+            "ts": "1234567890.123456",
+            "channel": "C12345678",
+        }
+
+        mock_app = MagicMock()
+        mock_app.client = mock_client
+        handler._app = mock_app
+
+        notification = Notification.create(
+            message="Claude is waiting for input",
+            notification_type="idle_prompt",
+            cwd="/home/user/project",
+        )
+
+        result = await handler.post_notification(notification)
+
+        assert result is True
+        mock_client.chat_postMessage.assert_called_once()
+        call_kwargs = mock_client.chat_postMessage.call_args[1]
+        assert call_kwargs["channel"] == "C12345678"
+        assert "blocks" in call_kwargs
+
+    async def test_post_notification_failure(self, config: SlackConfig) -> None:
+        """Test notification posting failure."""
+        handler = SlackHandler(config=config, on_action=AsyncMock())
+
+        mock_client = AsyncMock()
+        mock_client.chat_postMessage.side_effect = Exception("API error")
+
+        mock_app = MagicMock()
+        mock_app.client = mock_client
+        handler._app = mock_app
+
+        notification = Notification.create(
+            message="Test notification",
+            notification_type="idle_prompt",
+        )
+
+        result = await handler.post_notification(notification)
+        assert result is False
+
+    async def test_post_notification_without_app(self, config: SlackConfig) -> None:
+        """Test posting notification without app returns False."""
+        handler = SlackHandler(config=config, on_action=AsyncMock())
+
+        notification = Notification.create(
+            message="Test notification",
+            notification_type="idle_prompt",
+        )
+
+        result = await handler.post_notification(notification)
+        assert result is False
+
+
+class TestFormatNotification:
+    """Tests for format_notification function."""
+
+    def test_idle_prompt_notification(self) -> None:
+        """Test formatting an idle_prompt notification."""
+        notification = Notification(
+            notification_id="test-id",
+            message="Claude is waiting for input",
+            notification_type="idle_prompt",
+            cwd="/home/user/project",
+            timestamp=datetime(2025, 1, 20, 10, 30, 0, tzinfo=UTC),
+        )
+
+        blocks = format_notification(notification)
+
+        assert len(blocks) >= 2
+        # Check header with emoji
+        assert blocks[0]["type"] == "header"
+        assert "⏳" in blocks[0]["text"]["text"]  # idle_prompt emoji
+        assert "Idle Prompt" in blocks[0]["text"]["text"]
+
+        # Check message section
+        message_found = False
+        for block in blocks:
+            if block.get("type") == "section":
+                text = block.get("text", {}).get("text", "")
+                if "Claude is waiting for input" in text:
+                    message_found = True
+                    break
+        assert message_found
+
+        # Check context
+        context_block = blocks[-1]
+        assert context_block["type"] == "context"
+        context_text = context_block["elements"][0]["text"]
+        assert "10:30:00" in context_text
+        assert "/home/user/project" in context_text
+
+    def test_auth_success_notification(self) -> None:
+        """Test formatting an auth_success notification."""
+        notification = Notification(
+            notification_id="test-id",
+            message="Authentication successful",
+            notification_type="auth_success",
+            timestamp=datetime(2025, 1, 20, 10, 30, 0, tzinfo=UTC),
+        )
+
+        blocks = format_notification(notification)
+
+        assert blocks[0]["type"] == "header"
+        assert "🔑" in blocks[0]["text"]["text"]  # auth_success emoji
+        assert "Auth Success" in blocks[0]["text"]["text"]
+
+    def test_unknown_notification_type(self) -> None:
+        """Test formatting notification with unknown type uses default emoji."""
+        notification = Notification(
+            notification_id="test-id",
+            message="Some notification",
+            notification_type="unknown_type",
+            timestamp=datetime(2025, 1, 20, 10, 30, 0, tzinfo=UTC),
+        )
+
+        blocks = format_notification(notification)
+
+        assert blocks[0]["type"] == "header"
+        assert "📢" in blocks[0]["text"]["text"]  # default emoji
+
+    def test_long_message_truncated(self) -> None:
+        """Test that long messages are truncated."""
+        long_message = "x" * 1000
+        notification = Notification(
+            notification_id="test-id",
+            message=long_message,
+            notification_type="idle_prompt",
+            timestamp=datetime(2025, 1, 20, 10, 30, 0, tzinfo=UTC),
+        )
+
+        blocks = format_notification(notification)
+
+        # Find message section
+        for block in blocks:
+            if block.get("type") == "section":
+                text = block.get("text", {}).get("text", "")
+                if "x" in text:
+                    assert len(text) <= 503  # 500 + "..."
+                    assert "..." in text
+                    break
+
+    def test_empty_message(self) -> None:
+        """Test notification with empty message."""
+        notification = Notification(
+            notification_id="test-id",
+            message="",
+            notification_type="idle_prompt",
+            timestamp=datetime(2025, 1, 20, 10, 30, 0, tzinfo=UTC),
+        )
+
+        blocks = format_notification(notification)
+
+        # Should still have header and context, but no message section
+        assert len(blocks) >= 2
+        assert blocks[0]["type"] == "header"
+        # No section block with message
+        section_count = sum(1 for b in blocks if b.get("type") == "section")
+        assert section_count == 0
+
+    def test_long_cwd_truncated(self) -> None:
+        """Test that long cwd paths are truncated."""
+        long_cwd = "/home/user/" + "very_long_directory_name/" * 10
+        notification = Notification(
+            notification_id="test-id",
+            message="Test",
+            notification_type="idle_prompt",
+            cwd=long_cwd,
+            timestamp=datetime(2025, 1, 20, 10, 30, 0, tzinfo=UTC),
+        )
+
+        blocks = format_notification(notification)
+
+        context_block = blocks[-1]
+        context_text = context_block["elements"][0]["text"]
+        # Should be truncated with ...
+        assert "..." in context_text
+        assert len(context_text) < len(long_cwd) + 50  # Some margin for formatting
+
+    def test_notification_type_emoji_mapping(self) -> None:
+        """Test notification type emoji mapping."""
+        assert "idle_prompt" in NOTIFICATION_TYPE_EMOJI
+        assert "auth_success" in NOTIFICATION_TYPE_EMOJI
+        assert "elicitation_dialog" in NOTIFICATION_TYPE_EMOJI

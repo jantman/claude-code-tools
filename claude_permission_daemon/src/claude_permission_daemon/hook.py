@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Hook script for Claude Code permission requests.
+"""Hook script for Claude Code permission requests and notifications.
 
-This script is invoked by Claude Code for each permission request.
+This script is invoked by Claude Code for:
+- Permission requests (PreToolUse hook): Returns JSON to approve/deny
+- Notifications (Notification hook): One-way, no response expected
+
 It connects to the permission daemon via Unix socket and either:
-- Returns a JSON response to approve/deny the request
+- Returns a JSON response to approve/deny the request (permissions)
+- Sends the notification and exits (notifications)
 - Exits with no output to passthrough to normal flow
 
 IMPORTANT: This script uses only Python stdlib - no external dependencies.
@@ -156,6 +160,37 @@ def format_output(response: dict) -> str | None:
         return None
 
 
+def is_notification(request: dict) -> bool:
+    """Check if the request is a notification (not a permission request).
+
+    Args:
+        request: The parsed request dict.
+
+    Returns:
+        True if this is a notification, False if permission request.
+    """
+    return (
+        request.get("hook_event_name") == "Notification"
+        or "notification_type" in request
+    )
+
+
+def send_notification(sock: socket.socket, request: dict) -> None:
+    """Send a notification to the daemon (no response expected).
+
+    Args:
+        sock: Connected socket.
+        request: Request dict to send.
+    """
+    try:
+        # Send request as newline-terminated JSON
+        request_json = json.dumps(request) + "\n"
+        sock.sendall(request_json.encode())
+        # No response expected for notifications
+    except socket.error as e:
+        print(f"Socket error sending notification: {e}", file=sys.stderr)
+
+
 def main() -> int:
     """Main entry point.
 
@@ -168,8 +203,11 @@ def main() -> int:
         # Failed to read request, passthrough
         return 0
 
-    # Validate request has tool_name
-    if "tool_name" not in request:
+    # Check if this is a notification or permission request
+    notification = is_notification(request)
+
+    # For permission requests, validate tool_name is present
+    if not notification and "tool_name" not in request:
         print("Request missing tool_name", file=sys.stderr)
         return 0
 
@@ -184,7 +222,12 @@ def main() -> int:
         return 0
 
     try:
-        # Send request and get response
+        if notification:
+            # Handle notification - one-way, no response
+            send_notification(sock, request)
+            return 0
+
+        # Handle permission request
         response = send_request(sock, request)
         if response is None:
             # Communication failed, passthrough

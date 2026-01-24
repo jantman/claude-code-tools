@@ -11,7 +11,13 @@ import pytest
 
 from claude_permission_daemon.config import Config, DaemonConfig, SlackConfig, SwayidleConfig
 from claude_permission_daemon.daemon import Daemon, setup_logging, parse_args
-from claude_permission_daemon.state import Action, PendingRequest, PermissionRequest, StateManager
+from claude_permission_daemon.state import (
+    Action,
+    Notification,
+    PendingRequest,
+    PermissionRequest,
+    StateManager,
+)
 
 
 @pytest.fixture
@@ -823,3 +829,141 @@ class TestHelperFunctions:
             assert args.config == Path("/test/config.toml")
         finally:
             sys.argv = original_argv
+
+
+class TestDaemonNotificationHandling:
+    """Tests for notification handling."""
+
+    async def test_handle_notification_active_user_not_sent(
+        self, test_config: Config
+    ) -> None:
+        """Test that active user doesn't get notification sent to Slack."""
+        daemon = Daemon(test_config)
+
+        # User is active (default state)
+        assert not daemon._state.idle
+
+        # Create mock Slack handler
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.post_notification = AsyncMock(return_value=True)
+        daemon._slack_handler = mock_slack_handler
+
+        notification = Notification.create(
+            message="Claude is waiting for input",
+            notification_type="idle_prompt",
+        )
+
+        await daemon._handle_notification(notification)
+
+        # Should NOT post to Slack when active
+        mock_slack_handler.post_notification.assert_not_called()
+
+    async def test_handle_notification_idle_user_sent_to_slack(
+        self, test_config: Config
+    ) -> None:
+        """Test that idle user gets notification sent to Slack."""
+        daemon = Daemon(test_config)
+
+        # Set user to idle
+        await daemon._state.set_idle(True)
+
+        # Create mock Slack handler
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.post_notification = AsyncMock(return_value=True)
+        daemon._slack_handler = mock_slack_handler
+
+        notification = Notification.create(
+            message="Claude is waiting for input",
+            notification_type="idle_prompt",
+            cwd="/home/user/project",
+        )
+
+        await daemon._handle_notification(notification)
+
+        # Should post to Slack
+        mock_slack_handler.post_notification.assert_called_once_with(notification)
+
+    async def test_handle_notification_idle_no_slack_handler(
+        self, test_config: Config
+    ) -> None:
+        """Test that missing Slack handler doesn't raise error."""
+        daemon = Daemon(test_config)
+
+        # Set user to idle but no Slack handler
+        await daemon._state.set_idle(True)
+        daemon._slack_handler = None
+
+        notification = Notification.create(
+            message="Test notification",
+            notification_type="idle_prompt",
+        )
+
+        # Should not raise
+        await daemon._handle_notification(notification)
+
+    async def test_handle_notification_slack_failure_logged(
+        self, test_config: Config
+    ) -> None:
+        """Test that Slack failure is handled gracefully."""
+        daemon = Daemon(test_config)
+
+        # Set user to idle
+        await daemon._state.set_idle(True)
+
+        # Create mock Slack handler that fails
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.post_notification = AsyncMock(return_value=False)
+        daemon._slack_handler = mock_slack_handler
+
+        notification = Notification.create(
+            message="Test notification",
+            notification_type="idle_prompt",
+        )
+
+        # Should not raise despite failure
+        await daemon._handle_notification(notification)
+
+        # Should have tried to post
+        mock_slack_handler.post_notification.assert_called_once()
+
+    async def test_socket_server_created_with_notification_handler(
+        self,
+        test_config: Config,
+    ) -> None:
+        """Test that socket server is created with notification handler."""
+        daemon = Daemon(test_config)
+
+        mock_idle_monitor = MagicMock()
+        mock_idle_monitor.start = AsyncMock()
+        mock_idle_monitor.stop = AsyncMock()
+        mock_idle_monitor.run = AsyncMock()
+
+        mock_socket_server = MagicMock()
+        mock_socket_server.start = AsyncMock()
+        mock_socket_server.stop = AsyncMock()
+        mock_socket_server.run = AsyncMock()
+
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.start = AsyncMock()
+        mock_slack_handler.stop = AsyncMock()
+        mock_slack_handler.run = AsyncMock()
+
+        with patch(
+            "claude_permission_daemon.daemon.IdleMonitor",
+            return_value=mock_idle_monitor,
+        ), patch(
+            "claude_permission_daemon.daemon.SocketServer",
+            return_value=mock_socket_server,
+        ) as mock_socket_cls, patch(
+            "claude_permission_daemon.daemon.SlackHandler",
+            return_value=mock_slack_handler,
+        ):
+            await daemon.start()
+
+            # Verify SocketServer was created with on_notification callback
+            mock_socket_cls.assert_called_once()
+            call_kwargs = mock_socket_cls.call_args[1]
+            assert "on_notification" in call_kwargs
+            assert call_kwargs["on_notification"] == daemon._handle_notification
+
+            await daemon.stop()

@@ -17,6 +17,7 @@ from .slack_handler import SlackHandler
 from .socket_server import SocketServer, send_response
 from .state import (
     Action,
+    Notification,
     PendingRequest,
     PermissionRequest,
     PermissionResponse,
@@ -62,6 +63,7 @@ class Daemon:
         self._socket_server = SocketServer(
             socket_path=self._config.daemon.socket_path,
             on_request=self._handle_permission_request,
+            on_notification=self._handle_notification,
         )
         await self._socket_server.start()
 
@@ -295,6 +297,50 @@ class Daemon:
             reason="Daemon shutting down",
         )
         await send_response(pending.hook_writer, response)
+
+    async def _handle_notification(self, notification: Notification) -> None:
+        """Handle an incoming notification from hook script.
+
+        Notifications are one-way; they are sent to Slack when the user is idle
+        but no response is expected.
+
+        Args:
+            notification: The notification to handle.
+        """
+        state_desc = self._state.get_state_description()
+        logger.info(
+            f"Handling notification {notification.notification_id}: "
+            f"type={notification.notification_type}"
+        )
+
+        # Only send to Slack if user is idle
+        if not self._state.idle:
+            logger.info(
+                f"User {state_desc}, not sending notification to Slack"
+            )
+            return
+
+        # User is idle - post to Slack
+        if not self._slack_handler:
+            logger.warning(
+                f"User {state_desc}, but Slack handler not available, "
+                f"notification dropped"
+            )
+            return
+
+        logger.info(
+            f"User {state_desc}, posting notification to Slack"
+        )
+        success = await self._slack_handler.post_notification(notification)
+
+        if success:
+            logger.info(
+                f"Notification {notification.notification_id} posted to Slack"
+            )
+        else:
+            logger.error(
+                f"Failed to post notification {notification.notification_id} to Slack"
+            )
 
 
 def setup_logging(debug: bool = False) -> None:

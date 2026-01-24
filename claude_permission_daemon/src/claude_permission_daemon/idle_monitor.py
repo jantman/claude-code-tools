@@ -48,6 +48,7 @@ class IdleMonitor:
         self._process: asyncio.subprocess.Process | None = None
         self._running = False
         self._current_idle = False
+        self._stderr_task: asyncio.Task | None = None
 
     @property
     def idle(self) -> bool:
@@ -125,6 +126,10 @@ class IdleMonitor:
 
         self._running = True
         self._current_idle = False
+        # Start stderr reader task
+        self._stderr_task = asyncio.create_task(
+            self._read_stderr(), name="swayidle_stderr"
+        )
         logger.info("IdleMonitor started")
 
     async def stop(self) -> None:
@@ -133,6 +138,15 @@ class IdleMonitor:
             return
 
         self._running = False
+
+        # Cancel stderr reader task
+        if self._stderr_task is not None:
+            self._stderr_task.cancel()
+            try:
+                await self._stderr_task
+            except asyncio.CancelledError:
+                pass
+            self._stderr_task = None
 
         if self._process.returncode is None:
             logger.info("Terminating swayidle subprocess")
@@ -154,9 +168,11 @@ class IdleMonitor:
         or the subprocess exits unexpectedly.
         """
         if self._process is None or self._process.stdout is None:
+            logger.error("IdleMonitor.run() called but process or stdout is None")
             raise IdleMonitorError("IdleMonitor not started")
 
         logger.debug("Starting idle monitor read loop")
+        loop_count = 0
 
         try:
             while self._running:
@@ -166,6 +182,13 @@ class IdleMonitor:
                         timeout=1.0,
                     )
                 except asyncio.TimeoutError:
+                    loop_count += 1
+                    # Log every 60 iterations (roughly once per minute) to show we're alive
+                    if loop_count % 60 == 0:
+                        logger.debug(
+                            f"Idle monitor still waiting for swayidle output "
+                            f"(loop count: {loop_count})"
+                        )
                     # Check if still running and continue
                     if not self._running:
                         break
@@ -187,7 +210,7 @@ class IdleMonitor:
                 if not text:
                     continue
 
-                logger.debug(f"swayidle output: {text}")
+                logger.debug(f"swayidle stdout: {text}")
                 await self._handle_output(text)
 
         except Exception:
@@ -214,6 +237,34 @@ class IdleMonitor:
                 await self._on_idle_change(False)
         else:
             logger.warning(f"Unexpected swayidle output: {text}")
+
+    async def _read_stderr(self) -> None:
+        """Read and log stderr from swayidle subprocess."""
+        if self._process is None or self._process.stderr is None:
+            return
+
+        try:
+            while self._running:
+                try:
+                    line = await asyncio.wait_for(
+                        self._process.stderr.readline(),
+                        timeout=1.0,
+                    )
+                except asyncio.TimeoutError:
+                    if not self._running:
+                        break
+                    continue
+
+                if not line:
+                    break
+
+                text = line.decode().strip()
+                if text:
+                    logger.warning(f"swayidle stderr: {text}")
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.exception("Error reading swayidle stderr")
 
     async def restart(self) -> None:
         """Restart the swayidle subprocess.

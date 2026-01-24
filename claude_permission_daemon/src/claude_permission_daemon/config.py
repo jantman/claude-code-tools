@@ -24,6 +24,7 @@ class DaemonConfig:
     socket_path: Path = field(default_factory=lambda: DEFAULT_SOCKET_PATH)
     idle_timeout: int = DEFAULT_IDLE_TIMEOUT
     request_timeout: int = DEFAULT_REQUEST_TIMEOUT
+    debug: bool = False
 
 
 @dataclass
@@ -105,6 +106,7 @@ class Config:
             socket_path=Path(daemon_data.get("socket_path", DEFAULT_SOCKET_PATH)),
             idle_timeout=daemon_data.get("idle_timeout", DEFAULT_IDLE_TIMEOUT),
             request_timeout=daemon_data.get("request_timeout", DEFAULT_REQUEST_TIMEOUT),
+            debug=daemon_data.get("debug", False),
         )
 
         slack_config = SlackConfig(
@@ -145,6 +147,8 @@ class Config:
             self.daemon.request_timeout = int(request_timeout)
         if socket_path := os.environ.get("CLAUDE_PERM_SOCKET_PATH"):
             self.daemon.socket_path = Path(socket_path)
+        if debug := os.environ.get("CLAUDE_PERM_DEBUG"):
+            self.daemon.debug = debug.lower() in ("1", "true", "yes")
 
         # Swayidle overrides
         if swayidle_binary := os.environ.get("CLAUDE_PERM_SWAYIDLE_BINARY"):

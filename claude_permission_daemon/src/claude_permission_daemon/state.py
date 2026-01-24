@@ -181,7 +181,7 @@ class StateManager:
             self._idle_since = datetime.now(UTC)
             old_state_str = "idle" if old_state else "active"
             new_state_str = "idle" if idle else "active"
-            logger.info(
+            logger.debug(
                 f"Idle state changed: {old_state_str} -> {new_state_str} "
                 f"(was {old_state_str} for {old_duration:.1f}s)"
             )

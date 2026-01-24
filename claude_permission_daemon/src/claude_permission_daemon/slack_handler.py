@@ -75,8 +75,8 @@ class SlackHandler:
             app_token=self._config.app_token,
         )
 
-        # Start the handler (connects to Slack)
-        await self._handler.start_async()
+        # Connect to Slack (non-blocking - just establishes connection)
+        await self._handler.connect_async()
         self._running = True
         logger.info("Slack Socket Mode connected")
 

@@ -362,11 +362,22 @@ def setup_logging(debug: bool = False) -> None:
         debug: If True, use DEBUG level; otherwise INFO.
     """
     level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+
+    # Get the root logger
+    root_logger = logging.getLogger()
+
+    # If already configured, just update the level
+    if root_logger.handlers:
+        root_logger.setLevel(level)
+        for handler in root_logger.handlers:
+            handler.setLevel(level)
+    else:
+        logging.basicConfig(
+            level=level,
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+
     # Reduce noise from third-party libraries
     logging.getLogger("slack_bolt").setLevel(logging.WARNING)
     logging.getLogger("slack_sdk").setLevel(logging.WARNING)
@@ -417,6 +428,11 @@ def main() -> None:
     except Exception as e:
         logger.error(f"Failed to load config: {e}")
         sys.exit(1)
+
+    # Reconfigure logging if config enables debug but command line didn't
+    if config.daemon.debug and not args.debug:
+        setup_logging(debug=True)
+        logger.debug("Debug logging enabled via config")
 
     # Validate configuration
     errors = config.validate()

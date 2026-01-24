@@ -6,7 +6,7 @@
             "hooks": [
                 {
                     "type": "command",
-                    "command": "/home/jantman/bin/claude_notify.sh \"$(basename $(pwd))\""
+                    "command": "~/.local/share/claude-permission-daemon/venv/bin/claude-permission-hook"
                 }
             ]
         }

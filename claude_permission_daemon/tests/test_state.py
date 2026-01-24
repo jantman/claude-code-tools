@@ -8,6 +8,8 @@ import pytest
 
 from claude_permission_daemon.state import (
     Action,
+    MessageType,
+    Notification,
     PendingRequest,
     PermissionRequest,
     PermissionResponse,
@@ -23,6 +25,15 @@ class TestAction:
         assert Action.APPROVE.value == "approve"
         assert Action.DENY.value == "deny"
         assert Action.PASSTHROUGH.value == "passthrough"
+
+
+class TestMessageType:
+    """Tests for MessageType enum."""
+
+    def test_values(self) -> None:
+        """Test enum values match expected strings."""
+        assert MessageType.PERMISSION_REQUEST.value == "permission_request"
+        assert MessageType.NOTIFICATION.value == "notification"
 
 
 class TestPermissionRequest:
@@ -54,6 +65,43 @@ class TestPermissionRequest:
         assert req.tool_name == "Write"
         assert req.tool_input["file_path"] == "/tmp/test.txt"
         assert req.tool_input["content"] == "hello"
+
+
+class TestNotification:
+    """Tests for Notification dataclass."""
+
+    def test_create_generates_id(self) -> None:
+        """Test create() generates unique notification_id."""
+        notif1 = Notification.create("Test message", "idle_prompt")
+        notif2 = Notification.create("Test message", "idle_prompt")
+
+        assert notif1.notification_id != notif2.notification_id
+        assert len(notif1.notification_id) == 36  # UUID format
+
+    def test_create_sets_timestamp(self) -> None:
+        """Test create() sets timestamp to current time."""
+        before = datetime.now(UTC)
+        notif = Notification.create("Test message", "idle_prompt")
+        after = datetime.now(UTC)
+
+        assert before <= notif.timestamp <= after
+
+    def test_stores_notification_info(self) -> None:
+        """Test message and notification_type are stored."""
+        notif = Notification.create(
+            message="Claude is waiting for input",
+            notification_type="idle_prompt",
+            cwd="/home/user/project",
+        )
+
+        assert notif.message == "Claude is waiting for input"
+        assert notif.notification_type == "idle_prompt"
+        assert notif.cwd == "/home/user/project"
+
+    def test_cwd_optional(self) -> None:
+        """Test cwd defaults to None."""
+        notif = Notification.create("Test", "test_type")
+        assert notif.cwd is None
 
 
 class TestPermissionResponse:

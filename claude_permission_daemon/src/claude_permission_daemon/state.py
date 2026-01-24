@@ -22,6 +22,13 @@ class Action(Enum):
     PASSTHROUGH = "passthrough"
 
 
+class MessageType(Enum):
+    """Type of message received from hook."""
+
+    PERMISSION_REQUEST = "permission_request"
+    NOTIFICATION = "notification"
+
+
 @dataclass
 class PermissionRequest:
     """A permission request from Claude Code via the hook."""
@@ -38,6 +45,35 @@ class PermissionRequest:
             request_id=str(uuid4()),
             tool_name=tool_name,
             tool_input=tool_input,
+        )
+
+
+@dataclass
+class Notification:
+    """A one-way notification from Claude Code via the Notification hook.
+
+    Unlike permission requests, notifications do not require a response.
+    """
+
+    notification_id: str
+    message: str
+    notification_type: str
+    cwd: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    @classmethod
+    def create(
+        cls,
+        message: str,
+        notification_type: str,
+        cwd: str | None = None,
+    ) -> "Notification":
+        """Create a new notification with generated ID and timestamp."""
+        return cls(
+            notification_id=str(uuid4()),
+            message=message,
+            notification_type=notification_type,
+            cwd=cwd,
         )
 
 

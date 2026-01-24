@@ -1,7 +1,7 @@
 """Unix domain socket server for hook script connections.
 
-Accepts connections from hook scripts, receives permission requests,
-and sends responses back.
+Accepts connections from hook scripts, receives permission requests
+and notifications, and sends responses back (for permission requests only).
 """
 
 import asyncio
@@ -12,15 +12,24 @@ import stat
 from pathlib import Path
 from typing import Callable, Coroutine
 
-from .state import PendingRequest, PermissionRequest, PermissionResponse
+from .state import Notification, PermissionRequest, PermissionResponse
 
 logger = logging.getLogger(__name__)
 
-# Type alias for request handler callback
+# Type alias for permission request handler callback
 RequestHandler = Callable[
     [PermissionRequest, asyncio.StreamWriter],
     Coroutine[None, None, None],
 ]
+
+# Type alias for notification handler callback
+NotificationHandler = Callable[
+    [Notification],
+    Coroutine[None, None, None],
+]
+
+# Notification types to ignore (handled by existing permission system)
+IGNORED_NOTIFICATION_TYPES = {"permission_prompt"}
 
 
 class SocketServerError(Exception):
@@ -40,17 +49,21 @@ class SocketServer:
         self,
         socket_path: Path,
         on_request: RequestHandler,
+        on_notification: NotificationHandler | None = None,
     ) -> None:
         """Initialize the socket server.
 
         Args:
             socket_path: Path to the Unix domain socket.
-            on_request: Async callback called when a request is received.
+            on_request: Async callback called when a permission request is received.
                         Receives (PermissionRequest, StreamWriter) to allow
                         sending the response later.
+            on_notification: Optional async callback called when a notification
+                            is received. Notifications are one-way (no response).
         """
         self._socket_path = socket_path
         self._on_request = on_request
+        self._on_notification = on_notification
         self._server: asyncio.Server | None = None
         self._running = False
         self._active_connections: set[asyncio.StreamWriter] = set()
@@ -179,26 +192,18 @@ class SocketServer:
                 await self._send_error(writer, f"Invalid JSON: {e}")
                 return
 
-            # Validate required fields
-            if "tool_name" not in request_data:
-                logger.error(f"Missing tool_name from {peer}")
-                await self._send_error(writer, "Missing required field: tool_name")
-                return
-
-            # Create the permission request
-            request = PermissionRequest.create(
-                tool_name=request_data["tool_name"],
-                tool_input=request_data.get("tool_input", {}),
+            # Detect message type: notification vs permission request
+            # Notifications have hook_event_name="Notification" and/or notification_type
+            # Permission requests have tool_name
+            is_notification = (
+                request_data.get("hook_event_name") == "Notification"
+                or "notification_type" in request_data
             )
 
-            logger.info(
-                f"Received permission request: {request.request_id} "
-                f"for {request.tool_name}"
-            )
-
-            # Call the handler - it's responsible for sending the response
-            # The writer is passed so the response can be sent later
-            await self._on_request(request, writer)
+            if is_notification:
+                await self._handle_notification(request_data, writer, peer)
+            else:
+                await self._handle_permission_request(request_data, writer, peer)
 
         except Exception:
             logger.exception(f"Error handling connection from {peer}")
@@ -207,6 +212,107 @@ class SocketServer:
             # may be sent later (after Slack interaction). The daemon
             # is responsible for closing after sending the response.
             self._active_connections.discard(writer)
+
+    async def _handle_notification(
+        self,
+        request_data: dict,
+        writer: asyncio.StreamWriter,
+        peer: str,
+    ) -> None:
+        """Handle a notification message.
+
+        Args:
+            request_data: Parsed JSON data.
+            writer: Stream writer for the connection.
+            peer: Peer identifier for logging.
+        """
+        notification_type = request_data.get("notification_type", "unknown")
+
+        # Filter out ignored notification types
+        if notification_type in IGNORED_NOTIFICATION_TYPES:
+            logger.debug(
+                f"Ignoring notification of type '{notification_type}' "
+                f"(handled by permission system)"
+            )
+            # Close connection immediately - no response needed
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+            return
+
+        # Check if we have a notification handler
+        if not self._on_notification:
+            logger.debug(
+                f"No notification handler configured, ignoring notification "
+                f"of type '{notification_type}'"
+            )
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
+            return
+
+        # Create the notification
+        notification = Notification.create(
+            message=request_data.get("message", ""),
+            notification_type=notification_type,
+            cwd=request_data.get("cwd"),
+        )
+
+        logger.info(
+            f"Received notification: {notification.notification_id} "
+            f"type={notification_type}"
+        )
+
+        # Call the handler - notifications don't need responses
+        try:
+            await self._on_notification(notification)
+        except Exception:
+            logger.exception(f"Error in notification handler for {notification_type}")
+
+        # Close connection - no response needed for notifications
+        try:
+            writer.close()
+            await writer.wait_closed()
+        except Exception:
+            pass
+
+    async def _handle_permission_request(
+        self,
+        request_data: dict,
+        writer: asyncio.StreamWriter,
+        peer: str,
+    ) -> None:
+        """Handle a permission request message.
+
+        Args:
+            request_data: Parsed JSON data.
+            writer: Stream writer for the connection.
+            peer: Peer identifier for logging.
+        """
+        # Validate required fields
+        if "tool_name" not in request_data:
+            logger.error(f"Missing tool_name from {peer}")
+            await self._send_error(writer, "Missing required field: tool_name")
+            return
+
+        # Create the permission request
+        request = PermissionRequest.create(
+            tool_name=request_data["tool_name"],
+            tool_input=request_data.get("tool_input", {}),
+        )
+
+        logger.info(
+            f"Received permission request: {request.request_id} "
+            f"for {request.tool_name}"
+        )
+
+        # Call the handler - it's responsible for sending the response
+        # The writer is passed so the response can be sent later
+        await self._on_request(request, writer)
 
     async def _send_error(
         self,

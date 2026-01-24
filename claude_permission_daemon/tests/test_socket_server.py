@@ -9,11 +9,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from claude_permission_daemon.socket_server import (
+    IGNORED_NOTIFICATION_TYPES,
     SocketServer,
     SocketServerError,
     send_response,
 )
-from claude_permission_daemon.state import Action, PermissionRequest, PermissionResponse
+from claude_permission_daemon.state import (
+    Action,
+    Notification,
+    PermissionRequest,
+    PermissionResponse,
+)
 
 
 class TestSocketServer:
@@ -312,3 +318,199 @@ class TestSendResponse:
 
         # Should still try to close
         mock_writer.close.assert_called_once()
+
+
+class TestSocketServerNotifications:
+    """Tests for socket server notification handling."""
+
+    @pytest.fixture
+    def temp_socket_path(self, temp_dir: Path) -> Path:
+        """Provide temporary socket path."""
+        return temp_dir / "test.sock"
+
+    async def test_handle_notification(self, temp_socket_path: Path) -> None:
+        """Test handling a valid notification."""
+        received_notifications: list[Notification] = []
+
+        async def notification_handler(notification: Notification) -> None:
+            received_notifications.append(notification)
+
+        request_handler = AsyncMock()
+        server = SocketServer(
+            socket_path=temp_socket_path,
+            on_request=request_handler,
+            on_notification=notification_handler,
+        )
+        await server.start()
+
+        try:
+            # Connect and send notification
+            reader, writer = await asyncio.open_unix_connection(
+                str(temp_socket_path)
+            )
+
+            notification_data = {
+                "hook_event_name": "Notification",
+                "message": "Claude is waiting for input",
+                "notification_type": "idle_prompt",
+                "cwd": "/home/user/project",
+            }
+            writer.write(json.dumps(notification_data).encode() + b"\n")
+            await writer.drain()
+
+            # Wait for connection to close (notifications have no response)
+            await asyncio.sleep(0.1)
+
+            assert len(received_notifications) == 1
+            assert received_notifications[0].message == "Claude is waiting for input"
+            assert received_notifications[0].notification_type == "idle_prompt"
+            assert received_notifications[0].cwd == "/home/user/project"
+            request_handler.assert_not_called()
+
+        finally:
+            await server.stop()
+
+    async def test_notification_detected_by_notification_type_only(
+        self, temp_socket_path: Path
+    ) -> None:
+        """Test notification detected when only notification_type present."""
+        received_notifications: list[Notification] = []
+
+        async def notification_handler(notification: Notification) -> None:
+            received_notifications.append(notification)
+
+        request_handler = AsyncMock()
+        server = SocketServer(
+            socket_path=temp_socket_path,
+            on_request=request_handler,
+            on_notification=notification_handler,
+        )
+        await server.start()
+
+        try:
+            reader, writer = await asyncio.open_unix_connection(
+                str(temp_socket_path)
+            )
+
+            # No hook_event_name, just notification_type
+            notification_data = {
+                "message": "Test notification",
+                "notification_type": "auth_success",
+            }
+            writer.write(json.dumps(notification_data).encode() + b"\n")
+            await writer.drain()
+
+            await asyncio.sleep(0.1)
+
+            assert len(received_notifications) == 1
+            assert received_notifications[0].notification_type == "auth_success"
+
+        finally:
+            await server.stop()
+
+    async def test_permission_prompt_notification_ignored(
+        self, temp_socket_path: Path
+    ) -> None:
+        """Test permission_prompt notifications are ignored."""
+        received_notifications: list[Notification] = []
+
+        async def notification_handler(notification: Notification) -> None:
+            received_notifications.append(notification)
+
+        request_handler = AsyncMock()
+        server = SocketServer(
+            socket_path=temp_socket_path,
+            on_request=request_handler,
+            on_notification=notification_handler,
+        )
+        await server.start()
+
+        try:
+            reader, writer = await asyncio.open_unix_connection(
+                str(temp_socket_path)
+            )
+
+            notification_data = {
+                "hook_event_name": "Notification",
+                "message": "Claude needs permission",
+                "notification_type": "permission_prompt",
+            }
+            writer.write(json.dumps(notification_data).encode() + b"\n")
+            await writer.drain()
+
+            await asyncio.sleep(0.1)
+
+            # Should NOT be passed to handler
+            assert len(received_notifications) == 0
+            request_handler.assert_not_called()
+
+        finally:
+            await server.stop()
+
+    async def test_notification_without_handler(self, temp_socket_path: Path) -> None:
+        """Test notification is ignored when no handler configured."""
+        request_handler = AsyncMock()
+        server = SocketServer(
+            socket_path=temp_socket_path,
+            on_request=request_handler,
+            # No on_notification handler
+        )
+        await server.start()
+
+        try:
+            reader, writer = await asyncio.open_unix_connection(
+                str(temp_socket_path)
+            )
+
+            notification_data = {
+                "hook_event_name": "Notification",
+                "message": "Test",
+                "notification_type": "idle_prompt",
+            }
+            writer.write(json.dumps(notification_data).encode() + b"\n")
+            await writer.drain()
+
+            # Should not raise, just ignore
+            await asyncio.sleep(0.1)
+            request_handler.assert_not_called()
+
+        finally:
+            await server.stop()
+
+    async def test_notification_handler_exception_logged(
+        self, temp_socket_path: Path
+    ) -> None:
+        """Test notification handler exception is caught and logged."""
+        async def failing_handler(notification: Notification) -> None:
+            raise Exception("Handler failed")
+
+        request_handler = AsyncMock()
+        server = SocketServer(
+            socket_path=temp_socket_path,
+            on_request=request_handler,
+            on_notification=failing_handler,
+        )
+        await server.start()
+
+        try:
+            reader, writer = await asyncio.open_unix_connection(
+                str(temp_socket_path)
+            )
+
+            notification_data = {
+                "hook_event_name": "Notification",
+                "message": "Test",
+                "notification_type": "idle_prompt",
+            }
+            writer.write(json.dumps(notification_data).encode() + b"\n")
+            await writer.drain()
+
+            # Should not raise despite handler exception
+            await asyncio.sleep(0.1)
+
+        finally:
+            await server.stop()
+
+    def test_ignored_notification_types_constant(self) -> None:
+        """Test that permission_prompt is in ignored types."""
+        assert "permission_prompt" in IGNORED_NOTIFICATION_TYPES

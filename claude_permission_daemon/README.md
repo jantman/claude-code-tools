@@ -23,14 +23,21 @@ When you step away from your computer while Claude Code is running, permission r
 
 ### 1. Install the package
 
+Create a virtualenv and install:
+
 ```bash
-pip install --user .
+# Create virtualenv directory
+mkdir -p ~/.local/share/claude-permission-daemon
+python3.14 -m venv ~/.local/share/claude-permission-daemon/venv
+
+# Install the package
+~/.local/share/claude-permission-daemon/venv/bin/pip install /path/to/claude_permission_daemon
 ```
 
-Or for development:
+Or if installing from the source directory:
 
 ```bash
-pip install --user -e ".[dev]"
+~/.local/share/claude-permission-daemon/venv/bin/pip install .
 ```
 
 ### 2. Create a Slack App
@@ -84,7 +91,7 @@ journalctl --user -u claude-permission-daemon -f
 
 ### 5. Configure Claude Code
 
-Add to `~/.claude/settings.json`:
+Add to `~/.claude/settings.json` (use the full path to the hook in your virtualenv):
 
 ```json
 {
@@ -95,7 +102,7 @@ Add to `~/.claude/settings.json`:
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "claude-permission-hook"
+                        "command": "~/.local/share/claude-permission-daemon/venv/bin/claude-permission-hook"
                     }
                 ]
             }
@@ -166,7 +173,7 @@ journalctl --user -u claude-permission-daemon -f
 
 Verify config:
 ```bash
-claude-permission-daemon --debug
+~/.local/share/claude-permission-daemon/venv/bin/claude-permission-daemon --debug
 ```
 
 ### Slack messages not appearing
@@ -188,20 +195,21 @@ swayidle -w timeout 5 'echo IDLE' resume 'echo ACTIVE'
 ### Running tests
 
 ```bash
-pip install -e ".[dev]"
-pytest tests/ -v
+python3.14 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
+.venv/bin/pytest tests/ -v
 ```
 
 ### Running with debug logging
 
 ```bash
-claude-permission-daemon --debug
+.venv/bin/claude-permission-daemon --debug
 ```
 
 ### Testing the hook directly
 
 ```bash
-echo '{"tool_name":"Bash","tool_input":{"command":"echo test"}}' | claude-permission-hook
+echo '{"tool_name":"Bash","tool_input":{"command":"echo test"}}' | .venv/bin/claude-permission-hook
 ```
 
 ## License

@@ -5,7 +5,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/claude-permission-daemon
+ExecStart=%h/.local/share/claude-permission-daemon/venv/bin/claude-permission-daemon
 Restart=on-failure
 RestartSec=5
 

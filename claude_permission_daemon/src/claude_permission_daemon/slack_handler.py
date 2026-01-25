@@ -248,6 +248,34 @@ class SlackHandler:
         except Exception:
             logger.exception("Failed to update Slack message (answered locally)")
 
+    async def update_message_answered_remotely(
+        self, channel: str, message_ts: str, request: PermissionRequest
+    ) -> None:
+        """Update a message to show it was answered remotely.
+
+        This is used when the user answered via SSH/tmux while swayidle
+        still reported idle. The hook connection closed, indicating the
+        request was handled without Slack interaction.
+
+        Args:
+            channel: Slack channel ID.
+            message_ts: Message timestamp.
+            request: The original permission request.
+        """
+        if not self._app:
+            return
+
+        blocks = format_answered_remotely(request)
+        try:
+            await self._app.client.chat_update(
+                channel=channel,
+                ts=message_ts,
+                text=f"Answered remotely: {request.tool_name}",
+                blocks=blocks,
+            )
+        except Exception:
+            logger.exception("Failed to update Slack message (answered remotely)")
+
     async def post_notification(self, notification: Notification) -> bool:
         """Post a notification message to Slack.
 
@@ -560,6 +588,55 @@ def format_answered_locally(request: PermissionRequest) -> list[dict]:
                 {
                     "type": "mrkdwn",
                     "text": "You returned to your computer",
+                },
+            ],
+        },
+    ]
+
+
+def format_answered_remotely(request: PermissionRequest) -> list[dict]:
+    """Format a message for request answered remotely (via SSH/tmux).
+
+    This is distinct from "answered locally" - it indicates the user answered
+    via a remote connection (like SSH into tmux) while swayidle still reported
+    idle. The key difference is swayidle never detected the user's return.
+
+    Args:
+        request: The original permission request.
+
+    Returns:
+        List of Slack Block Kit block dicts.
+    """
+    tool_input = request.tool_input
+    if "command" in tool_input:
+        input_display = tool_input["command"]
+    elif "file_path" in tool_input:
+        input_display = tool_input["file_path"]
+    else:
+        input_display = str(tool_input)[:100]
+
+    return [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"🌐 Answered Remotely: {request.tool_name}",
+                "emoji": True,
+            },
+        },
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"```{input_display}```",
+            },
+        },
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": "You answered via remote session (SSH/tmux)",
                 },
             ],
         },

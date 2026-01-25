@@ -302,6 +302,84 @@ class Daemon:
         await send_response(pending.hook_writer, response)
         logger.info(f"Response sent for request {request_id}")
 
+    async def _monitor_connection(self, request_id: str) -> None:
+        """Monitor a pending request's hook connection for closure.
+
+        When the hook script exits (e.g., user answered locally via SSH/tmux),
+        the connection closes. This method detects that and triggers cleanup.
+
+        Args:
+            request_id: ID of the request to monitor.
+        """
+        pending = await self._state.get_pending_request(request_id)
+        if not pending or not pending.hook_reader:
+            logger.debug(f"Cannot monitor {request_id}: no reader available")
+            return
+
+        logger.debug(f"Starting connection monitor for request {request_id}")
+
+        try:
+            # Wait for EOF (connection closed) or cancellation
+            # read() returns empty bytes on EOF
+            while True:
+                try:
+                    data = await asyncio.wait_for(
+                        pending.hook_reader.read(1),
+                        timeout=1.0,
+                    )
+                    if not data:
+                        # EOF - connection closed by hook script
+                        logger.info(
+                            f"Connection closed for request {request_id} "
+                            f"(answered remotely)"
+                        )
+                        await self._handle_answered_remotely(request_id)
+                        return
+                except asyncio.TimeoutError:
+                    # Check if request is still pending
+                    still_pending = await self._state.get_pending_request(request_id)
+                    if not still_pending:
+                        # Request was resolved by other means
+                        logger.debug(
+                            f"Request {request_id} no longer pending, "
+                            f"stopping connection monitor"
+                        )
+                        return
+                    continue
+        except asyncio.CancelledError:
+            logger.debug(f"Connection monitor cancelled for {request_id}")
+            raise
+        except Exception:
+            logger.exception(f"Error in connection monitor for {request_id}")
+
+    async def _handle_answered_remotely(self, request_id: str) -> None:
+        """Handle a request that was answered remotely (connection closed).
+
+        Updates the Slack message and cleans up the pending request.
+        Does NOT send a response since the connection is already closed.
+
+        Args:
+            request_id: ID of the request that was answered remotely.
+        """
+        pending = await self._state.remove_pending_request(request_id)
+        if not pending:
+            # Already resolved by other means (race condition)
+            logger.debug(f"Request {request_id} already resolved")
+            return
+
+        logger.info(f"Request {request_id} answered remotely, updating Slack")
+
+        # Update Slack message if we posted one
+        if pending.slack_message_ts and pending.slack_channel and self._slack_handler:
+            await self._slack_handler.update_message_answered_remotely(
+                channel=pending.slack_channel,
+                message_ts=pending.slack_message_ts,
+                request=pending.request,
+            )
+
+        # Note: We do NOT send a response here because the hook connection
+        # is already closed - that's how we detected this situation.
+
     async def _send_passthrough(self, pending: PendingRequest) -> None:
         """Send a passthrough response to a pending request.
 

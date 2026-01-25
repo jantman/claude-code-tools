@@ -144,7 +144,7 @@ def send_request(sock: socket.socket, request: dict) -> dict | None:
 def format_output(response: dict) -> str | None:
     """Format the daemon response as Claude Code output.
 
-    Uses the new hookSpecificOutput format for PreToolUse hooks.
+    Uses the hookSpecificOutput format for PermissionRequest hooks.
     See: https://code.claude.com/docs/en/hooks
 
     Args:
@@ -154,23 +154,24 @@ def format_output(response: dict) -> str | None:
         JSON string for Claude Code, or None for passthrough.
     """
     action = response.get("action")
-    reason = response.get("reason", "")
 
     if action == "approve":
-        # Use the new hookSpecificOutput format
+        # Use the PermissionRequest hook format with decision.behavior
         return json.dumps({
             "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-                "permissionDecisionReason": reason,
+                "hookEventName": "PermissionRequest",
+                "decision": {
+                    "behavior": "allow",
+                }
             }
         })
     elif action == "deny":
         return json.dumps({
             "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
+                "hookEventName": "PermissionRequest",
+                "decision": {
+                    "behavior": "deny",
+                }
             }
         })
     elif action == "passthrough":

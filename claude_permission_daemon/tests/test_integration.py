@@ -261,8 +261,8 @@ class TestHookScript:
 
         assert output is not None
         data = json.loads(output)
-        assert data["hookSpecificOutput"]["permissionDecision"] == "allow"
-        assert data["hookSpecificOutput"]["permissionDecisionReason"] == "Approved via Slack"
+        assert data["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
+        assert data["hookSpecificOutput"]["decision"]["behavior"] == "allow"
 
     def test_hook_format_output_deny(self) -> None:
         """Test hook formats deny response correctly."""
@@ -273,8 +273,8 @@ class TestHookScript:
 
         assert output is not None
         data = json.loads(output)
-        assert data["hookSpecificOutput"]["permissionDecision"] == "deny"
-        assert data["hookSpecificOutput"]["permissionDecisionReason"] == "Denied via Slack"
+        assert data["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
+        assert data["hookSpecificOutput"]["decision"]["behavior"] == "deny"
 
     def test_hook_format_output_passthrough(self) -> None:
         """Test hook returns None for passthrough."""
@@ -375,7 +375,8 @@ class TestEndToEndFlow:
 
             assert output is not None
             claude_response = json.loads(output)
-            assert claude_response["hookSpecificOutput"]["permissionDecision"] == "allow"
+            assert claude_response["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
+            assert claude_response["hookSpecificOutput"]["decision"]["behavior"] == "allow"
 
         finally:
             await server.stop()
@@ -408,7 +409,8 @@ class TestEndToEndFlow:
 
             assert output is not None
             claude_response = json.loads(output)
-            assert claude_response["hookSpecificOutput"]["permissionDecision"] == "deny"
+            assert claude_response["hookSpecificOutput"]["hookEventName"] == "PermissionRequest"
+            assert claude_response["hookSpecificOutput"]["decision"]["behavior"] == "deny"
 
         finally:
             await server.stop()

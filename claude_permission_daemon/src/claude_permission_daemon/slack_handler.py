@@ -5,6 +5,8 @@ Handles posting permission request messages and receiving button callbacks.
 
 import asyncio
 import logging
+import socket
+from datetime import datetime, timezone
 from typing import Callable, Coroutine
 
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
@@ -15,6 +17,26 @@ from .config import SlackConfig
 from .state import Action, Notification, PendingRequest, PermissionRequest
 
 logger = logging.getLogger(__name__)
+
+
+def get_short_hostname() -> str:
+    """Get the short hostname (without domain)."""
+    return socket.gethostname().split(".")[0]
+
+
+def to_local_time(dt: datetime) -> datetime:
+    """Convert a datetime to local timezone.
+
+    Args:
+        dt: A datetime object (may be naive or UTC).
+
+    Returns:
+        Datetime in local timezone.
+    """
+    if dt.tzinfo is None:
+        # Assume naive datetime is UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone()
 
 # Type alias for action callback
 ActionCallback = Callable[[str, Action], Coroutine[None, None, None]]
@@ -363,14 +385,16 @@ def format_permission_request(request: PermissionRequest) -> list[dict]:
             },
         })
 
-    # Add timestamp
-    timestamp = request.timestamp.strftime("%H:%M:%S")
+    # Add timestamp (in local time) and hostname
+    local_time = to_local_time(request.timestamp)
+    timestamp = local_time.strftime("%H:%M:%S")
+    hostname = get_short_hostname()
     blocks.append({
         "type": "context",
         "elements": [
             {
                 "type": "mrkdwn",
-                "text": f"Requested at {timestamp}",
+                "text": f"Requested at {timestamp} • on {hostname}",
             },
         ],
     })
@@ -593,14 +617,16 @@ def format_notification(notification: Notification) -> list[dict]:
             },
         })
 
-    # Add context with timestamp and optional cwd
-    context_parts = [f"Received at {notification.timestamp.strftime('%H:%M:%S')}"]
+    # Add context with timestamp (in local time), optional cwd, and hostname
+    local_time = to_local_time(notification.timestamp)
+    context_parts = [f"Received at {local_time.strftime('%H:%M:%S')}"]
     if notification.cwd:
         # Show just the last part of the path for brevity
         cwd_display = notification.cwd
         if len(cwd_display) > 50:
             cwd_display = "..." + cwd_display[-47:]
         context_parts.append(f"in `{cwd_display}`")
+    context_parts.append(f"on {get_short_hostname()}")
 
     blocks.append({
         "type": "context",

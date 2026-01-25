@@ -47,7 +47,11 @@ class TestSocketServerIntegration:
         socket_path = temp_dir / "test.sock"
         received_requests = []
 
-        async def handler(request: PermissionRequest, writer: asyncio.StreamWriter):
+        async def handler(
+            request: PermissionRequest,
+            reader: asyncio.StreamReader,
+            writer: asyncio.StreamWriter,
+        ):
             received_requests.append(request)
             response = PermissionResponse(Action.APPROVE, "Test approved")
             await send_response(writer, response)
@@ -84,7 +88,11 @@ class TestSocketServerIntegration:
         received_count = 0
         received_lock = asyncio.Lock()
 
-        async def handler(request: PermissionRequest, writer: asyncio.StreamWriter):
+        async def handler(
+            request: PermissionRequest,
+            reader: asyncio.StreamReader,
+            writer: asyncio.StreamWriter,
+        ):
             nonlocal received_count
             async with received_lock:
                 received_count += 1
@@ -119,7 +127,11 @@ class TestSocketServerIntegration:
         socket_path = temp_dir / "test.sock"
         pending_writers = []
 
-        async def handler(request: PermissionRequest, writer: asyncio.StreamWriter):
+        async def handler(
+            request: PermissionRequest,
+            reader: asyncio.StreamReader,
+            writer: asyncio.StreamWriter,
+        ):
             # Don't respond immediately - store writer for later
             pending_writers.append((request, writer))
 
@@ -345,7 +357,9 @@ class TestEndToEndFlow:
 
         # Simulate daemon behavior
         async def daemon_handler(
-            request: PermissionRequest, writer: asyncio.StreamWriter
+            request: PermissionRequest,
+            reader: asyncio.StreamReader,
+            writer: asyncio.StreamWriter,
         ):
             # Simulate "idle" state - would post to Slack and wait for approval
             # For testing, just approve immediately
@@ -386,7 +400,9 @@ class TestEndToEndFlow:
         socket_path = temp_dir / "test.sock"
 
         async def daemon_handler(
-            request: PermissionRequest, writer: asyncio.StreamWriter
+            request: PermissionRequest,
+            reader: asyncio.StreamReader,
+            writer: asyncio.StreamWriter,
         ):
             response = PermissionResponse(Action.DENY, "Denied via Slack")
             await send_response(writer, response)
@@ -420,7 +436,9 @@ class TestEndToEndFlow:
         socket_path = temp_dir / "test.sock"
 
         async def daemon_handler(
-            request: PermissionRequest, writer: asyncio.StreamWriter
+            request: PermissionRequest,
+            reader: asyncio.StreamReader,
+            writer: asyncio.StreamWriter,
         ):
             # User is active - passthrough
             response = PermissionResponse(Action.PASSTHROUGH, "User active locally")

@@ -173,12 +173,14 @@ class Daemon:
     async def _handle_permission_request(
         self,
         request: PermissionRequest,
+        reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
     ) -> None:
         """Handle an incoming permission request from hook script.
 
         Args:
             request: The permission request.
+            reader: StreamReader to monitor connection closure.
             writer: StreamWriter to send response back to hook.
         """
         logger.info(
@@ -190,6 +192,7 @@ class Daemon:
         pending = PendingRequest(
             request=request,
             hook_writer=writer,
+            hook_reader=reader,
         )
         await self._state.add_pending_request(pending)
 

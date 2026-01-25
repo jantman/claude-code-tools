@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Type alias for permission request handler callback
 RequestHandler = Callable[
-    [PermissionRequest, asyncio.StreamWriter],
+    [PermissionRequest, asyncio.StreamReader, asyncio.StreamWriter],
     Coroutine[None, None, None],
 ]
 
@@ -209,7 +209,7 @@ class SocketServer:
             if is_notification:
                 await self._handle_notification(request_data, writer, peer)
             else:
-                await self._handle_permission_request(request_data, writer, peer)
+                await self._handle_permission_request(request_data, reader, writer, peer)
 
         except Exception:
             logger.exception(f"Error handling connection from {peer}")
@@ -289,6 +289,7 @@ class SocketServer:
     async def _handle_permission_request(
         self,
         request_data: dict,
+        reader: asyncio.StreamReader,
         writer: asyncio.StreamWriter,
         peer: str,
     ) -> None:
@@ -296,6 +297,7 @@ class SocketServer:
 
         Args:
             request_data: Parsed JSON data.
+            reader: Stream reader for the connection.
             writer: Stream writer for the connection.
             peer: Peer identifier for logging.
         """
@@ -317,8 +319,9 @@ class SocketServer:
         )
 
         # Call the handler - it's responsible for sending the response
-        # The writer is passed so the response can be sent later
-        await self._on_request(request, writer)
+        # The reader and writer are passed so we can monitor the connection
+        # and send the response later
+        await self._on_request(request, reader, writer)
 
     async def _send_error(
         self,

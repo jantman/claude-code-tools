@@ -143,7 +143,9 @@ class TestSocketServerConnections:
         received_writers: list[asyncio.StreamWriter] = []
 
         async def handler(
-            request: PermissionRequest, writer: asyncio.StreamWriter
+            request: PermissionRequest,
+            reader: asyncio.StreamReader,
+            writer: asyncio.StreamWriter,
         ) -> None:
             received_requests.append(request)
             received_writers.append(writer)
@@ -238,7 +240,9 @@ class TestSocketServerConnections:
         received_requests: list[PermissionRequest] = []
 
         async def handler(
-            request: PermissionRequest, writer: asyncio.StreamWriter
+            request: PermissionRequest,
+            reader: asyncio.StreamReader,
+            writer: asyncio.StreamWriter,
         ) -> None:
             received_requests.append(request)
             await send_response(

@@ -282,6 +282,7 @@ class TestDaemonPermissionHandling:
         # User is active (default state)
         assert not daemon._state.idle
 
+        mock_reader = MagicMock()
         mock_writer = MagicMock()
         request = PermissionRequest.create("Bash", {"command": "echo test"})
 
@@ -289,7 +290,7 @@ class TestDaemonPermissionHandling:
             "claude_permission_daemon.daemon.send_response",
             new_callable=AsyncMock,
         ) as mock_send:
-            await daemon._handle_permission_request(request, mock_writer)
+            await daemon._handle_permission_request(request, mock_reader, mock_writer)
 
             # Should send passthrough immediately
             mock_send.assert_called_once()
@@ -313,10 +314,11 @@ class TestDaemonPermissionHandling:
         )
         daemon._slack_handler = mock_slack_handler
 
+        mock_reader = MagicMock()
         mock_writer = MagicMock()
         request = PermissionRequest.create("Bash", {"command": "echo test"})
 
-        await daemon._handle_permission_request(request, mock_writer)
+        await daemon._handle_permission_request(request, mock_reader, mock_writer)
 
         # Should post to Slack
         mock_slack_handler.post_permission_request.assert_called_once()
@@ -341,6 +343,7 @@ class TestDaemonPermissionHandling:
         mock_slack_handler.post_permission_request = AsyncMock(return_value=None)
         daemon._slack_handler = mock_slack_handler
 
+        mock_reader = MagicMock()
         mock_writer = MagicMock()
         request = PermissionRequest.create("Bash", {"command": "echo test"})
 
@@ -348,7 +351,7 @@ class TestDaemonPermissionHandling:
             "claude_permission_daemon.daemon.send_response",
             new_callable=AsyncMock,
         ) as mock_send:
-            await daemon._handle_permission_request(request, mock_writer)
+            await daemon._handle_permission_request(request, mock_reader, mock_writer)
 
             # Should send passthrough
             mock_send.assert_called_once()
@@ -366,6 +369,7 @@ class TestDaemonPermissionHandling:
         await daemon._state.set_idle(True)
         daemon._slack_handler = None
 
+        mock_reader = MagicMock()
         mock_writer = MagicMock()
         request = PermissionRequest.create("Bash", {"command": "echo test"})
 
@@ -373,7 +377,7 @@ class TestDaemonPermissionHandling:
             "claude_permission_daemon.daemon.send_response",
             new_callable=AsyncMock,
         ) as mock_send:
-            await daemon._handle_permission_request(request, mock_writer)
+            await daemon._handle_permission_request(request, mock_reader, mock_writer)
 
             # Should send passthrough
             mock_send.assert_called_once()

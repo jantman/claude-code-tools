@@ -96,14 +96,16 @@ class PermissionResponse:
 class PendingRequest:
     """Internal tracking of a pending permission request.
 
-    Holds the request, the asyncio writer to respond to the hook,
+    Holds the request, the asyncio reader/writer to respond to the hook,
     and optional Slack message tracking info.
     """
 
     request: PermissionRequest
     hook_writer: asyncio.StreamWriter
+    hook_reader: asyncio.StreamReader | None = None
     slack_message_ts: str | None = None
     slack_channel: str | None = None
+    monitor_task: asyncio.Task | None = None
 
     @property
     def request_id(self) -> str:

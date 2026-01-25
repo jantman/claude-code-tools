@@ -326,6 +326,32 @@ class TestStateManager:
             channel="C12345678",
         )
 
+    async def test_set_monitor_task(
+        self, state_manager: StateManager, mock_pending_request: PendingRequest
+    ) -> None:
+        """Test setting monitor task for a pending request."""
+        await state_manager.add_pending_request(mock_pending_request)
+
+        mock_task = MagicMock(spec=asyncio.Task)
+        await state_manager.set_monitor_task(
+            mock_pending_request.request_id,
+            mock_task,
+        )
+
+        pending = await state_manager.get_pending_request(
+            mock_pending_request.request_id
+        )
+        assert pending is not None
+        assert pending.monitor_task is mock_task
+
+    async def test_set_monitor_task_nonexistent(
+        self, state_manager: StateManager
+    ) -> None:
+        """Test setting monitor task for nonexistent request does nothing."""
+        mock_task = MagicMock(spec=asyncio.Task)
+        # Should not raise
+        await state_manager.set_monitor_task("nonexistent-id", mock_task)
+
     async def test_clear_all_pending(self, state_manager: StateManager) -> None:
         """Test clearing all pending requests."""
         mock_writer = MagicMock(spec=asyncio.StreamWriter)

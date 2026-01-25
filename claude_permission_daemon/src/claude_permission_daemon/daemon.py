@@ -115,10 +115,17 @@ class Daemon:
         if self._idle_monitor:
             await self._idle_monitor.stop()
 
-        # Send passthrough to any remaining pending requests
+        # Cancel any monitor tasks and send passthrough to pending requests
         logger.debug("Clearing pending requests...")
         pending = await self._state.clear_all_pending()
         for p in pending:
+            # Cancel monitor task if running
+            if p.monitor_task and not p.monitor_task.done():
+                p.monitor_task.cancel()
+                try:
+                    await p.monitor_task
+                except asyncio.CancelledError:
+                    pass
             await self._send_passthrough(p)
 
         logger.info("Daemon stopped")

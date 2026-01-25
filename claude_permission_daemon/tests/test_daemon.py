@@ -717,6 +717,134 @@ class TestDaemonIdleStateChange:
             mock_send.assert_not_called()
 
 
+class TestConnectionMonitoring:
+    """Tests for connection monitoring (answered remotely) functionality."""
+
+    async def test_handle_answered_remotely_updates_slack(
+        self, test_config: Config
+    ) -> None:
+        """Test that answered remotely updates Slack message."""
+        daemon = Daemon(test_config)
+
+        # Create mock Slack handler
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.update_message_answered_remotely = AsyncMock()
+        daemon._slack_handler = mock_slack_handler
+
+        # Add pending request with Slack info
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "test"})
+        pending = PendingRequest(
+            request=request,
+            hook_writer=mock_writer,
+            slack_message_ts="1234567890.123456",
+            slack_channel="C12345678",
+        )
+        await daemon._state.add_pending_request(pending)
+
+        # Handle as answered remotely
+        await daemon._handle_answered_remotely(request.request_id)
+
+        # Should update Slack message
+        mock_slack_handler.update_message_answered_remotely.assert_called_once_with(
+            channel="C12345678",
+            message_ts="1234567890.123456",
+            request=request,
+        )
+
+        # Should be removed from pending
+        remaining = await daemon._state.get_pending_request(request.request_id)
+        assert remaining is None
+
+    async def test_handle_answered_remotely_already_resolved(
+        self, test_config: Config
+    ) -> None:
+        """Test that answered remotely handles already-resolved request gracefully."""
+        daemon = Daemon(test_config)
+
+        # No pending request - should not raise
+        await daemon._handle_answered_remotely("nonexistent-id")
+
+    async def test_resolve_request_cancels_monitor_task(
+        self, test_config: Config
+    ) -> None:
+        """Test that resolving a request cancels its monitor task."""
+        daemon = Daemon(test_config)
+
+        # Add pending request with a monitor task
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "test"})
+
+        # Create a mock task that can be cancelled
+        async def dummy_task():
+            await asyncio.sleep(100)
+
+        task = asyncio.create_task(dummy_task())
+
+        pending = PendingRequest(
+            request=request,
+            hook_writer=mock_writer,
+            monitor_task=task,
+        )
+        await daemon._state.add_pending_request(pending)
+
+        with patch(
+            "claude_permission_daemon.daemon.send_response",
+            new_callable=AsyncMock,
+        ):
+            await daemon._resolve_request(
+                request.request_id, Action.APPROVE, "Test"
+            )
+
+        # Task should be cancelled
+        assert task.cancelled()
+
+    async def test_request_posted_to_slack_starts_monitor(
+        self, test_config: Config
+    ) -> None:
+        """Test that posting to Slack starts a connection monitor."""
+        daemon = Daemon(test_config)
+
+        # Set user to idle
+        await daemon._state.set_idle(True)
+
+        # Create mock Slack handler
+        mock_slack_handler = MagicMock()
+        mock_slack_handler.post_permission_request = AsyncMock(
+            return_value=("1234567890.123456", "C12345678")
+        )
+        daemon._slack_handler = mock_slack_handler
+
+        # Create a mock reader that blocks on read (simulating open connection)
+        mock_reader = AsyncMock()
+
+        async def slow_read(n):
+            await asyncio.sleep(100)  # Block "forever"
+            return b""
+
+        mock_reader.read = slow_read
+        mock_writer = MagicMock()
+        request = PermissionRequest.create("Bash", {"command": "echo test"})
+
+        await daemon._handle_permission_request(request, mock_reader, mock_writer)
+
+        # Give the monitor task a moment to start
+        await asyncio.sleep(0.1)
+
+        # Should have a monitor task
+        pending = await daemon._state.get_pending_request(request.request_id)
+        assert pending is not None
+        assert pending.monitor_task is not None
+        assert not pending.monitor_task.done()
+
+        # Clean up
+        pending.monitor_task.cancel()
+        try:
+            await pending.monitor_task
+        except asyncio.CancelledError:
+            pass
+
+
 class TestHelperFunctions:
     """Tests for module-level helper functions."""
 

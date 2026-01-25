@@ -195,6 +195,50 @@ class TestFormatAnsweredLocally:
         assert "returned to your computer" in context_block["elements"][0]["text"]
 
 
+class TestFormatAnsweredRemotely:
+    """Tests for format_answered_remotely function."""
+
+    def test_answered_remotely_message(self) -> None:
+        """Test answered remotely message formatting."""
+        from claude_permission_daemon.slack_handler import format_answered_remotely
+
+        request = PermissionRequest(
+            request_id="test-id",
+            tool_name="Bash",
+            tool_input={"command": "ls -la"},
+            timestamp=datetime.now(UTC),
+        )
+
+        blocks = format_answered_remotely(request)
+
+        assert len(blocks) >= 2
+        # Check header shows answered remotely with globe emoji
+        assert blocks[0]["type"] == "header"
+        assert "Answered Remotely" in blocks[0]["text"]["text"]
+        assert "🌐" in blocks[0]["text"]["text"]
+        # Check context mentions SSH/tmux
+        context_block = blocks[-1]
+        assert "SSH" in context_block["elements"][0]["text"] or \
+               "remote" in context_block["elements"][0]["text"]
+
+    def test_answered_remotely_file_operation(self) -> None:
+        """Test answered remotely formatting for file operations."""
+        from claude_permission_daemon.slack_handler import format_answered_remotely
+
+        request = PermissionRequest(
+            request_id="test-id",
+            tool_name="Write",
+            tool_input={"file_path": "/tmp/test.txt"},
+            timestamp=datetime.now(UTC),
+        )
+
+        blocks = format_answered_remotely(request)
+
+        # Should include the file path in the display
+        section_block = blocks[1]
+        assert "/tmp/test.txt" in section_block["text"]["text"]
+
+
 class TestSlackHandler:
     """Tests for SlackHandler class."""
 
@@ -406,6 +450,28 @@ class TestSlackHandlerWithMockedApp:
         mock_client.chat_update.assert_called_once()
         assert "Answered locally" in mock_client.chat_update.call_args[1]["text"]
 
+    async def test_update_message_answered_remotely(
+        self, config: SlackConfig
+    ) -> None:
+        """Test updating message to answered remotely."""
+        handler = SlackHandler(config=config, on_action=AsyncMock())
+
+        mock_client = AsyncMock()
+        mock_app = MagicMock()
+        mock_app.client = mock_client
+        handler._app = mock_app
+
+        request = PermissionRequest.create("Bash", {"command": "test"})
+
+        await handler.update_message_answered_remotely(
+            channel="C12345678",
+            message_ts="1234567890.123456",
+            request=request,
+        )
+
+        mock_client.chat_update.assert_called_once()
+        assert "Answered remotely" in mock_client.chat_update.call_args[1]["text"]
+
     async def test_update_message_without_app(self, config: SlackConfig) -> None:
         """Test update methods do nothing without app."""
         handler = SlackHandler(config=config, on_action=AsyncMock())
@@ -415,6 +481,7 @@ class TestSlackHandlerWithMockedApp:
         await handler.update_message_approved("C123", "ts", request)
         await handler.update_message_denied("C123", "ts", request)
         await handler.update_message_answered_locally("C123", "ts", request)
+        await handler.update_message_answered_remotely("C123", "ts", request)
 
     async def test_post_notification_success(self, config: SlackConfig) -> None:
         """Test successful notification posting."""

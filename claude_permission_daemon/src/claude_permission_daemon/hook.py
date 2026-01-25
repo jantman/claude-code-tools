@@ -96,15 +96,24 @@ def send_request(sock: socket.socket, request: dict) -> dict | None:
     Returns:
         Response dict, or None if communication fails.
     """
+    debug = os.environ.get("CLAUDE_PERM_DEBUG", "").lower() in ("1", "true", "yes")
+
     try:
         # Send request as newline-terminated JSON
         request_json = json.dumps(request) + "\n"
         sock.sendall(request_json.encode())
+        if debug:
+            print(f"[DEBUG] Sent request, waiting for response...", file=sys.stderr)
 
         # Receive response (may take a while for Slack interaction)
         response_data = b""
         while True:
             chunk = sock.recv(4096)
+            if debug:
+                print(
+                    f"[DEBUG] Received chunk: {len(chunk)} bytes",
+                    file=sys.stderr,
+                )
             if not chunk:
                 break
             response_data += chunk
@@ -115,6 +124,9 @@ def send_request(sock: socket.socket, request: dict) -> dict | None:
         if not response_data:
             print("No response from daemon", file=sys.stderr)
             return None
+
+        if debug:
+            print(f"[DEBUG] Response: {response_data.decode().strip()}", file=sys.stderr)
 
         return json.loads(response_data.decode().strip())
 
@@ -132,6 +144,9 @@ def send_request(sock: socket.socket, request: dict) -> dict | None:
 def format_output(response: dict) -> str | None:
     """Format the daemon response as Claude Code output.
 
+    Uses the new hookSpecificOutput format for PreToolUse hooks.
+    See: https://code.claude.com/docs/en/hooks
+
     Args:
         response: Response dict from daemon.
 
@@ -142,14 +157,21 @@ def format_output(response: dict) -> str | None:
     reason = response.get("reason", "")
 
     if action == "approve":
+        # Use the new hookSpecificOutput format
         return json.dumps({
-            "decision": "approve",
-            "reason": reason,
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+                "permissionDecisionReason": reason,
+            }
         })
     elif action == "deny":
         return json.dumps({
-            "decision": "deny",
-            "reason": reason,
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
         })
     elif action == "passthrough":
         # Return None to indicate passthrough (no output)

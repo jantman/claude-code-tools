@@ -297,6 +297,7 @@ class Daemon:
         )
 
         await send_response(pending.hook_writer, response)
+        logger.info(f"Response sent for request {request_id}")
 
     async def _send_passthrough(self, pending: PendingRequest) -> None:
         """Send a passthrough response to a pending request.

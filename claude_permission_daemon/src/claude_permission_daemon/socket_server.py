@@ -351,14 +351,26 @@ async def send_response(
         else:
             data = response
 
+        # Check if writer is in a valid state
+        if writer.is_closing():
+            logger.error("Cannot send response: writer is already closing")
+            return
+
         json_data = json.dumps(data) + "\n"
+        logger.debug(f"Sending response: {json_data.strip()}")
         writer.write(json_data.encode())
         await writer.drain()
+        logger.debug("Response sent and drained successfully")
+    except ConnectionResetError:
+        logger.error("Connection reset by peer - hook script may have timed out or closed")
+    except BrokenPipeError:
+        logger.error("Broken pipe - hook script connection was closed")
     except Exception:
         logger.exception("Error sending response")
     finally:
         try:
             writer.close()
             await writer.wait_closed()
+            logger.debug("Writer closed")
         except Exception:
             pass

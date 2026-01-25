@@ -242,6 +242,13 @@ class Daemon:
         await self._state.update_slack_info(request.request_id, message_ts, channel)
         logger.info(f"Request {request.request_id} posted to Slack, awaiting response")
 
+        # Start connection monitoring task to detect if answered remotely
+        monitor_task = asyncio.create_task(
+            self._monitor_connection(request.request_id),
+            name=f"monitor_{request.request_id}",
+        )
+        await self._state.set_monitor_task(request.request_id, monitor_task)
+
     async def _handle_slack_action(self, request_id: str, action: Action) -> None:
         """Handle an action from Slack (approve/deny button click).
 
@@ -293,6 +300,15 @@ class Daemon:
         if not pending:
             logger.warning(f"Tried to resolve unknown request: {request_id}")
             return
+
+        # Cancel the connection monitor task if running
+        if pending.monitor_task and not pending.monitor_task.done():
+            pending.monitor_task.cancel()
+            try:
+                await pending.monitor_task
+            except asyncio.CancelledError:
+                pass
+            logger.debug(f"Cancelled monitor task for {request_id}")
 
         response = PermissionResponse(action=action, reason=reason)
         logger.info(

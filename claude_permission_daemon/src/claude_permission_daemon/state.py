@@ -229,6 +229,15 @@ class StateManager:
                 pending.slack_channel = channel
                 logger.debug(f"Updated Slack info for {request_id}: ts={message_ts}")
 
+    async def set_monitor_task(
+        self, request_id: str, task: asyncio.Task
+    ) -> None:
+        """Set the connection monitor task for a pending request."""
+        async with self._lock:
+            if pending := self._pending_requests.get(request_id):
+                pending.monitor_task = task
+                logger.debug(f"Set monitor task for {request_id}")
+
     async def clear_all_pending(self) -> list[PendingRequest]:
         """Clear and return all pending requests."""
         async with self._lock:

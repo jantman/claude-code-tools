@@ -317,16 +317,26 @@ Add to `~/.claude/settings.json`:
 
 ## Hook Script Output Format
 
-The hook script must output valid JSON that Claude Code understands:
+The hook script must output valid JSON using Claude Code's `PermissionRequest` hook format:
 
 **To approve:**
 ```json
-{"decision": "approve", "reason": "Approved via Slack"}
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionRequest",
+    "decision": { "behavior": "allow" }
+  }
+}
 ```
 
 **To deny:**
 ```json
-{"decision": "deny", "reason": "Denied via Slack"}
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionRequest",
+    "decision": { "behavior": "deny" }
+  }
+}
 ```
 
 **To pass through to normal flow:**

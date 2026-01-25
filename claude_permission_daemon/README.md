@@ -98,9 +98,9 @@ Add to `~/.claude/settings.json` (use the full path to the hook in your virtuale
 ```json
 {
     "hooks": {
-        "PreToolUse": [
+        "PermissionRequest": [
             {
-                "matcher": "",
+                "matcher": "*",
                 "hooks": [
                     {
                         "type": "command",
@@ -124,7 +124,7 @@ Add to `~/.claude/settings.json` (use the full path to the hook in your virtuale
 }
 ```
 
-**Note:** The `Notification` hook is optional. If configured, you'll receive Slack notifications when Claude is waiting for input (idle prompt) or other events occur while you're away. `permission_prompt` notifications are automatically filtered out since they're already handled by the permission request system.
+**Note:** The `PermissionRequest` hook uses the `decision.behavior` response format. The `Notification` hook is optional - if configured, you'll receive Slack notifications when Claude is waiting for input (idle prompt) or other events occur while you're away. `permission_prompt` notifications are automatically filtered out since they're already handled by the permission request system.
 
 ## Configuration Reference
 

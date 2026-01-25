@@ -63,11 +63,23 @@ daemon.py (main orchestrator)
 
 ### Data Flow for Permission Requests
 
-1. Claude Code triggers PreToolUse hook → invokes `claude-permission-hook`
+1. Claude Code triggers PermissionRequest hook → invokes `claude-permission-hook`
 2. Hook reads JSON from stdin, connects to daemon via Unix socket
 3. If user is **active**: immediate passthrough response
 4. If user is **idle**: posts to Slack with buttons, waits for response
 5. User clicks button OR returns from idle → response sent to hook → Claude proceeds
+
+### Hook Response Format
+
+The hook uses Claude Code's `PermissionRequest` hook format:
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionRequest",
+    "decision": { "behavior": "allow" }
+  }
+}
+```
 
 ### State Transitions
 

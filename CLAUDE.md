@@ -85,6 +85,10 @@ The hook uses Claude Code's `PermissionRequest` hook format:
 
 When user returns while Slack message is pending: message updates to "Answered Locally", normal local prompt appears, subsequent Slack clicks are ignored.
 
+### Remote Answer Detection
+
+The daemon detects when a permission request is answered remotely (e.g., via SSH into a tmux session) while `swayidle` still reports the user as idle. This is done by monitoring the hook script's socket connection - when Claude Code proceeds (because the user answered locally), the hook script exits and the connection closes. The daemon detects this EOF and updates the Slack message to "Answered Remotely" with a globe emoji (🌐).
+
 ## Configuration
 
 User config: `~/.config/claude-permission-daemon/config.toml` (see `example/config.toml`)

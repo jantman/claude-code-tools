@@ -15,6 +15,7 @@ from claude_permission_daemon.slack_handler import (
     format_denied,
     format_notification,
     format_permission_request,
+    to_local_time,
 )
 from claude_permission_daemon.state import (
     Action,
@@ -510,7 +511,11 @@ class TestFormatNotification:
         context_block = blocks[-1]
         assert context_block["type"] == "context"
         context_text = context_block["elements"][0]["text"]
-        assert "10:30:00" in context_text
+        # Time is converted to local timezone, so calculate expected local time
+        expected_local_time = to_local_time(
+            datetime(2025, 1, 20, 10, 30, 0, tzinfo=UTC)
+        ).strftime("%H:%M:%S")
+        assert expected_local_time in context_text
         assert "/home/user/project" in context_text
 
     def test_auth_success_notification(self) -> None:

@@ -277,6 +277,7 @@ class TestSendResponse:
         mock_writer.drain = AsyncMock()
         mock_writer.close = MagicMock()
         mock_writer.wait_closed = AsyncMock()
+        mock_writer.is_closing = MagicMock(return_value=False)
 
         response = PermissionResponse(Action.APPROVE, "Approved via Slack")
         await send_response(mock_writer, response)
@@ -296,6 +297,7 @@ class TestSendResponse:
         mock_writer.drain = AsyncMock()
         mock_writer.close = MagicMock()
         mock_writer.wait_closed = AsyncMock()
+        mock_writer.is_closing = MagicMock(return_value=False)
 
         response = {"error": "Test error"}
         await send_response(mock_writer, response)

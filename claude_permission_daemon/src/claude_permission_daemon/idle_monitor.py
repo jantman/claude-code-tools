@@ -6,23 +6,14 @@ Manages a swayidle subprocess that reports idle/active state changes.
 import asyncio
 import logging
 import shutil
-from typing import Callable, Coroutine
 
+from .base_idle_monitor import BaseIdleMonitor, IdleCallback, IdleMonitorError
 from .config import SwayidleConfig
 
 logger = logging.getLogger(__name__)
 
-# Type alias for idle state callback
-IdleCallback = Callable[[bool], Coroutine[None, None, None]]
 
-
-class IdleMonitorError(Exception):
-    """Error related to idle monitoring."""
-
-    pass
-
-
-class IdleMonitor:
+class SwayidleMonitor(BaseIdleMonitor):
     """Monitors user idle state using swayidle subprocess.
 
     Spawns swayidle configured to print IDLE/ACTIVE to stdout,
@@ -107,7 +98,7 @@ class IdleMonitor:
             IdleMonitorError: If subprocess fails to start.
         """
         if self._running:
-            logger.warning("IdleMonitor already running")
+            logger.warning("SwayidleMonitor already running")
             return
 
         cmd = self._build_command()
@@ -130,7 +121,7 @@ class IdleMonitor:
         self._stderr_task = asyncio.create_task(
             self._read_stderr(), name="swayidle_stderr"
         )
-        logger.info("IdleMonitor started")
+        logger.info("SwayidleMonitor started")
 
     async def stop(self) -> None:
         """Stop the swayidle subprocess."""
@@ -159,7 +150,7 @@ class IdleMonitor:
                 await self._process.wait()
 
         self._process = None
-        logger.info("IdleMonitor stopped")
+        logger.info("SwayidleMonitor stopped")
 
     async def run(self) -> None:
         """Main loop: read swayidle output and trigger callbacks.
@@ -168,8 +159,8 @@ class IdleMonitor:
         or the subprocess exits unexpectedly.
         """
         if self._process is None or self._process.stdout is None:
-            logger.error("IdleMonitor.run() called but process or stdout is None")
-            raise IdleMonitorError("IdleMonitor not started")
+            logger.error("SwayidleMonitor.run() called but process or stdout is None")
+            raise IdleMonitorError("SwayidleMonitor not started")
 
         logger.debug("Starting idle monitor read loop")
         loop_count = 0
@@ -271,10 +262,14 @@ class IdleMonitor:
 
         Useful for recovery after unexpected exit.
         """
-        logger.info("Restarting IdleMonitor")
+        logger.info("Restarting SwayidleMonitor")
         await self.stop()
         # Reset idle state on restart
         if self._current_idle:
             self._current_idle = False
             await self._on_idle_change(False)
         await self.start()
+
+
+# Backward compatibility alias
+IdleMonitor = SwayidleMonitor

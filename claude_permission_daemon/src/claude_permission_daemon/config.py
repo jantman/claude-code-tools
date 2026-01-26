@@ -4,14 +4,42 @@ Loads configuration from TOML file with environment variable overrides.
 """
 
 import os
+import platform
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Self
 
 
+def _get_default_socket_path() -> Path:
+    """Get platform-appropriate default socket path."""
+    # Check for XDG_RUNTIME_DIR first (Linux standard)
+    if "XDG_RUNTIME_DIR" in os.environ:
+        return Path(os.environ["XDG_RUNTIME_DIR"]) / "claude-permissions.sock"
+
+    # Platform-specific defaults
+    system = platform.system()
+    if system == "Linux":
+        # Try common Linux runtime directories
+        uid = os.getuid()
+        runtime_dir = Path(f"/run/user/{uid}")
+        if runtime_dir.exists():
+            return runtime_dir / "claude-permissions.sock"
+        # Fallback to /tmp for Linux if /run/user doesn't exist
+        return Path("/tmp") / "claude-permissions.sock"
+    elif system == "Darwin":
+        # macOS: use /tmp
+        return Path("/tmp") / "claude-permissions.sock"
+    elif system == "Windows":
+        # Windows: use named pipe (not a file path)
+        return Path(r"\\.\pipe\claude-permissions")
+    else:
+        # Unknown platform: use /tmp as safest fallback
+        return Path("/tmp") / "claude-permissions.sock"
+
+
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "claude-permission-daemon" / "config.toml"
-DEFAULT_SOCKET_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")) / "claude-permissions.sock"
+DEFAULT_SOCKET_PATH = _get_default_socket_path()
 DEFAULT_IDLE_TIMEOUT = 60
 DEFAULT_REQUEST_TIMEOUT = 300
 DEFAULT_SWAYIDLE_BINARY = "swayidle"

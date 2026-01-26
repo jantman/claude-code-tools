@@ -15,6 +15,7 @@ DEFAULT_SOCKET_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")) 
 DEFAULT_IDLE_TIMEOUT = 60
 DEFAULT_REQUEST_TIMEOUT = 300
 DEFAULT_SWAYIDLE_BINARY = "swayidle"
+DEFAULT_IOREG_BINARY = "ioreg"
 
 
 @dataclass
@@ -59,12 +60,20 @@ class SwayidleConfig:
 
 
 @dataclass
+class MacIdleConfig:
+    """Configuration for macOS idle monitoring."""
+
+    binary: str = DEFAULT_IOREG_BINARY
+
+
+@dataclass
 class Config:
     """Complete daemon configuration."""
 
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     slack: SlackConfig = field(default_factory=SlackConfig)
     swayidle: SwayidleConfig = field(default_factory=SwayidleConfig)
+    mac: MacIdleConfig = field(default_factory=MacIdleConfig)
 
     def validate(self) -> list[str]:
         """Validate configuration, returning list of errors."""
@@ -101,6 +110,7 @@ class Config:
         daemon_data = data.get("daemon", {})
         slack_data = data.get("slack", {})
         swayidle_data = data.get("swayidle", {})
+        mac_data = data.get("mac", {})
 
         daemon_config = DaemonConfig(
             socket_path=Path(daemon_data.get("socket_path", DEFAULT_SOCKET_PATH)),
@@ -119,10 +129,15 @@ class Config:
             binary=swayidle_data.get("binary", DEFAULT_SWAYIDLE_BINARY),
         )
 
+        mac_config = MacIdleConfig(
+            binary=mac_data.get("binary", DEFAULT_IOREG_BINARY),
+        )
+
         config = cls(
             daemon=daemon_config,
             slack=slack_config,
             swayidle=swayidle_config,
+            mac=mac_config,
         )
 
         # Apply environment variable overrides
@@ -153,3 +168,7 @@ class Config:
         # Swayidle overrides
         if swayidle_binary := os.environ.get("CLAUDE_PERM_SWAYIDLE_BINARY"):
             self.swayidle.binary = swayidle_binary
+
+        # Mac overrides
+        if ioreg_binary := os.environ.get("CLAUDE_PERM_IOREG_BINARY"):
+            self.mac.binary = ioreg_binary

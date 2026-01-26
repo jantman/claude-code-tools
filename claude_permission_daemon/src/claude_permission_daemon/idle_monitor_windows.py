@@ -5,22 +5,41 @@ Monitors user idle state by polling GetLastInputInfo via ctypes.
 
 import asyncio
 import logging
-import time
-from ctypes import Structure, byref, c_uint, sizeof, windll
-from ctypes.wintypes import DWORD
+from ctypes import Structure, c_uint
 
 from .base_idle_monitor import BaseIdleMonitor, IdleCallback, IdleMonitorError
 
 logger = logging.getLogger(__name__)
 
+# Import Windows-specific items only when needed to avoid ImportError on non-Windows
+try:
+    from ctypes import byref, sizeof, windll
+    from ctypes.wintypes import DWORD
 
-class LASTINPUTINFO(Structure):
-    """Structure for GetLastInputInfo Win32 API call."""
+    WINDOWS_AVAILABLE = True
+except (ImportError, AttributeError):
+    # Not on Windows or windll not available
+    WINDOWS_AVAILABLE = False
+    DWORD = None  # type: ignore
+    # Create dummy objects for testing on non-Windows platforms
+    windll = None  # type: ignore
+    byref = None  # type: ignore
+    sizeof = None  # type: ignore
 
-    _fields_ = [
-        ("cbSize", c_uint),
-        ("dwTime", DWORD),
-    ]
+
+if WINDOWS_AVAILABLE:
+
+    class LASTINPUTINFO(Structure):
+        """Structure for GetLastInputInfo Win32 API call."""
+
+        _fields_ = [
+            ("cbSize", c_uint),
+            ("dwTime", DWORD),  # type: ignore
+        ]
+
+else:
+    # Dummy class for non-Windows platforms
+    LASTINPUTINFO = None  # type: ignore
 
 
 class WindowsIdleMonitor(BaseIdleMonitor):
@@ -64,10 +83,14 @@ class WindowsIdleMonitor(BaseIdleMonitor):
         Returns:
             Idle time in seconds, or None if unable to determine.
         """
+        if not WINDOWS_AVAILABLE:
+            logger.error("Windows API not available on this platform")
+            return None
+
         try:
             # Create LASTINPUTINFO structure
-            last_input_info = LASTINPUTINFO()
-            last_input_info.cbSize = sizeof(LASTINPUTINFO)
+            last_input_info = LASTINPUTINFO()  # type: ignore
+            last_input_info.cbSize = sizeof(LASTINPUTINFO)  # type: ignore
 
             # Call GetLastInputInfo
             if not windll.user32.GetLastInputInfo(byref(last_input_info)):

@@ -111,7 +111,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ) as mock_idle_cls, patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -149,7 +149,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -176,7 +176,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -204,7 +204,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -232,7 +232,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -1081,7 +1081,7 @@ class TestDaemonNotificationHandling:
         mock_slack_handler.run = AsyncMock()
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",

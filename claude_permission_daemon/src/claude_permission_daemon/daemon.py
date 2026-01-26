@@ -11,8 +11,9 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .base_idle_monitor import IdleMonitorError
 from .config import Config, DEFAULT_CONFIG_PATH
-from .idle_monitor import IdleMonitor
+from .idle_monitor_factory import create_idle_monitor
 from .slack_handler import SlackHandler
 from .socket_server import SocketServer, send_response
 from .state import (
@@ -51,12 +52,16 @@ class Daemon:
         # Register idle state callback
         self._state.register_idle_callback(self._on_idle_change)
 
-        # Start idle monitor
-        self._idle_monitor = IdleMonitor(
-            config=self._config.swayidle,
-            idle_timeout=self._config.daemon.idle_timeout,
-            on_idle_change=self._state.set_idle,
-        )
+        # Start idle monitor (platform-specific via factory)
+        try:
+            self._idle_monitor = create_idle_monitor(
+                config=self._config,
+                idle_timeout=self._config.daemon.idle_timeout,
+                on_idle_change=self._state.set_idle,
+            )
+        except IdleMonitorError as e:
+            logger.error(f"Failed to create idle monitor: {e}")
+            raise
         await self._idle_monitor.start()
 
         # Start socket server

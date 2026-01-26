@@ -143,6 +143,10 @@ class MacIdleMonitor(BaseIdleMonitor):
 
         self._running = True
         self._current_idle = False
+
+        # Create background polling task
+        self._poll_task = asyncio.create_task(self.run(), name="mac_idle_poll")
+
         logger.info("MacIdleMonitor started")
 
     async def stop(self) -> None:

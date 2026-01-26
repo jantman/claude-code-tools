@@ -142,6 +142,10 @@ class WindowsIdleMonitor(BaseIdleMonitor):
 
         self._running = True
         self._current_idle = False
+
+        # Create background polling task
+        self._poll_task = asyncio.create_task(self.run(), name="windows_idle_poll")
+
         logger.info("WindowsIdleMonitor started")
 
     async def stop(self) -> None:

@@ -80,8 +80,8 @@ class Daemon:
         await self._slack_handler.start()
 
         # Start component tasks
+        # Note: idle_monitor creates its own background task in start()
         self._tasks = [
-            asyncio.create_task(self._idle_monitor.run(), name="idle_monitor"),
             asyncio.create_task(self._socket_server.run(), name="socket_server"),
             asyncio.create_task(self._slack_handler.run(), name="slack_handler"),
         ]

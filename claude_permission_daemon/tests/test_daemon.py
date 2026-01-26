@@ -132,8 +132,8 @@ class TestDaemonStartStop:
             mock_socket_server.start.assert_called_once()
             mock_slack_handler.start.assert_called_once()
 
-            # Verify tasks were created
-            assert len(daemon._tasks) == 3
+            # Verify tasks were created (idle_monitor self-manages its task)
+            assert len(daemon._tasks) == 2
 
             # Cleanup
             await daemon.stop()
@@ -186,7 +186,8 @@ class TestDaemonStartStop:
             return_value=mock_slack_handler,
         ):
             await daemon.start()
-            assert len(daemon._tasks) == 3
+            # idle_monitor self-manages its task
+            assert len(daemon._tasks) == 2
 
             await daemon.stop()
 

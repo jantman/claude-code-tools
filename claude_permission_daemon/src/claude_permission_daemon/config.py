@@ -67,6 +67,17 @@ class MacIdleConfig:
 
 
 @dataclass
+class WindowsIdleConfig:
+    """Configuration for Windows idle monitoring.
+
+    Currently empty as Windows implementation uses built-in APIs with no
+    configuration needed. Included for consistency and future extensibility.
+    """
+
+    pass
+
+
+@dataclass
 class Config:
     """Complete daemon configuration."""
 
@@ -74,6 +85,7 @@ class Config:
     slack: SlackConfig = field(default_factory=SlackConfig)
     swayidle: SwayidleConfig = field(default_factory=SwayidleConfig)
     mac: MacIdleConfig = field(default_factory=MacIdleConfig)
+    windows: WindowsIdleConfig = field(default_factory=WindowsIdleConfig)
 
     def validate(self) -> list[str]:
         """Validate configuration, returning list of errors."""
@@ -111,6 +123,7 @@ class Config:
         slack_data = data.get("slack", {})
         swayidle_data = data.get("swayidle", {})
         mac_data = data.get("mac", {})
+        windows_data = data.get("windows", {})
 
         daemon_config = DaemonConfig(
             socket_path=Path(daemon_data.get("socket_path", DEFAULT_SOCKET_PATH)),
@@ -133,11 +146,15 @@ class Config:
             binary=mac_data.get("binary", DEFAULT_IOREG_BINARY),
         )
 
+        # Windows config currently has no fields
+        windows_config = WindowsIdleConfig()
+
         config = cls(
             daemon=daemon_config,
             slack=slack_config,
             swayidle=swayidle_config,
             mac=mac_config,
+            windows=windows_config,
         )
 
         # Apply environment variable overrides

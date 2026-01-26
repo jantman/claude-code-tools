@@ -159,7 +159,17 @@ Both Mac and Windows implementations will use polling (check idle time every ~1 
 
 ## Current Status
 
-**Phase**: Planning complete, awaiting approval
+**Phase**: ✅ Complete
+
+All milestones implemented and tested:
+- ✅ Milestone 1: Abstraction layer created (BaseIdleMonitor)
+- ✅ Milestone 2: Mac support implemented (MacIdleMonitor with ioreg)
+- ✅ Milestone 3: Windows support implemented (WindowsIdleMonitor with GetLastInputInfo)
+- ✅ Milestone 4: Platform detection factory added
+- ✅ Milestone 5: Integration and cross-platform polish complete
+- ✅ Milestone 6: Documentation updated, all 240 tests passing
+
+The daemon now supports Linux (swayidle), macOS (ioreg), and Windows (GetLastInputInfo API) with automatic platform detection.
 
 ## Design Decisions
 

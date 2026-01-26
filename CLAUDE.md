@@ -47,7 +47,10 @@ socket_server.py
     ↓ (async queue)
 daemon.py (main orchestrator)
     ├─→ slack_handler.py (Socket Mode WebSocket → post messages, handle button clicks)
-    ├─→ idle_monitor.py (swayidle subprocess → IDLE/ACTIVE state)
+    ├─→ idle_monitor_factory.py (platform detection → creates appropriate idle monitor)
+    │   ├─→ idle_monitor.py (Linux: swayidle subprocess → IDLE/ACTIVE state)
+    │   ├─→ idle_monitor_mac.py (macOS: ioreg polling → IDLE/ACTIVE state)
+    │   └─→ idle_monitor_windows.py (Windows: GetLastInputInfo API → IDLE/ACTIVE state)
     └─→ state.py (pending requests, idle duration, thread-safe operations)
 ```
 
@@ -57,7 +60,11 @@ daemon.py (main orchestrator)
 - **hook.py**: Entry point from Claude Code - uses only Python stdlib for reliability
 - **socket_server.py**: Unix domain socket server routing requests to handlers
 - **slack_handler.py**: Slack Socket Mode integration for posting messages and handling button callbacks
-- **idle_monitor.py**: Spawns swayidle, parses stdout for IDLE/ACTIVE markers
+- **idle_monitor_factory.py**: Platform detection and idle monitor creation
+- **base_idle_monitor.py**: Abstract base class defining idle monitor interface
+- **idle_monitor.py**: Linux implementation - spawns swayidle, parses stdout for IDLE/ACTIVE markers
+- **idle_monitor_mac.py**: macOS implementation - polls ioreg for IOHIDSystem idle time
+- **idle_monitor_windows.py**: Windows implementation - polls GetLastInputInfo API for idle time
 - **state.py**: Thread-safe state manager with `asyncio.Lock`, tracks pending requests and idle state
 - **config.py**: TOML config loading with environment variable overrides
 

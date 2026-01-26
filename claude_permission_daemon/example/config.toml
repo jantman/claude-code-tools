@@ -34,6 +34,15 @@ app_token = "xapp-your-app-token-here"
 channel = "U01234567"
 
 [swayidle]
-# Path to swayidle binary
+# Path to swayidle binary (Linux only)
 # Default: "swayidle" (found in PATH)
 # binary = "/usr/bin/swayidle"
+
+[mac]
+# Path to ioreg binary (macOS only)
+# Default: "ioreg" (usually at /usr/sbin/ioreg)
+# binary = "/usr/sbin/ioreg"
+
+[windows]
+# No configuration needed for Windows
+# Uses built-in GetLastInputInfo API

@@ -4,10 +4,13 @@ Remote approval of Claude Code permission requests and notifications via Slack w
 
 ## Overview
 
-When you step away from your computer while Claude Code is running, permission requests would normally block until you return. This daemon detects when you're idle (using [swayidle](https://github.com/swaywm/swayidle)) and forwards permission requests to Slack where you can approve or deny them from your phone. It also forwards Claude Code notifications (like "waiting for input") to Slack when you're idle.
+When you step away from your computer while Claude Code is running, permission requests would normally block until you return. This daemon detects when you're idle and forwards permission requests to Slack where you can approve or deny them from your phone. It also forwards Claude Code notifications (like "waiting for input") to Slack when you're idle.
 
 **Key features:**
-- Idle detection via swayidle (Wayland)
+- Cross-platform idle detection:
+  - **Linux**: swayidle (Wayland/X11)
+  - **macOS**: IOHIDSystem via ioreg
+  - **Windows**: GetLastInputInfo API
 - Slack Socket Mode for real-time notifications
 - Approve/deny buttons for permission requests
 - One-way notifications (idle prompts, auth events, etc.)
@@ -20,7 +23,9 @@ When you step away from your computer while Claude Code is running, permission r
 ## Requirements
 
 - Python 3.14+
-- KDE Plasma on Wayland (or any Wayland compositor supporting swayidle)
+- **Linux**: swayidle installed (available in most distro repositories)
+- **macOS**: ioreg (included with macOS)
+- **Windows**: Windows API (included with Windows)
 - A Slack workspace with permission to create apps
 
 ## Installation

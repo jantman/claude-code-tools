@@ -7,7 +7,6 @@ import asyncio
 import logging
 import re
 import shutil
-from typing import Any
 
 from .base_idle_monitor import BaseIdleMonitor, IdleCallback, IdleMonitorError
 from .config import MacIdleConfig
@@ -159,7 +158,8 @@ class MacIdleMonitor(BaseIdleMonitor):
             try:
                 await self._poll_task
             except asyncio.CancelledError:
-                pass
+                # Expected when stopping: the polling task is cancelled intentionally.
+                logger.debug("MacIdleMonitor poll task cancelled during stop()")
             self._poll_task = None
 
         logger.info("MacIdleMonitor stopped")

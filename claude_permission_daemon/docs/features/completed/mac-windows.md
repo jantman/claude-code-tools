@@ -23,7 +23,7 @@ The current implementation has `IdleMonitor` class hardcoded to use `swayidle` s
 ### Idle Detection Approaches
 
 **Linux (existing)**: `swayidle` subprocess that prints IDLE/ACTIVE to stdout
-**Mac**: Poll `ioreg -c IOHIDSystem` every second to read `HIDIdleTime` (milliseconds since last input)
+**Mac**: Poll `ioreg -c IOHIDSystem` every second to read `HIDIdleTime` (nanoseconds since last input)
 **Windows**: Poll `ctypes.windll.user32.GetLastInputInfo()` every second to calculate idle time
 
 Both Mac and Windows implementations will use polling (check idle time every ~1 second) and trigger the callback when idle state transitions occur.

@@ -123,7 +123,6 @@ class Config:
         slack_data = data.get("slack", {})
         swayidle_data = data.get("swayidle", {})
         mac_data = data.get("mac", {})
-        windows_data = data.get("windows", {})
 
         daemon_config = DaemonConfig(
             socket_path=Path(daemon_data.get("socket_path", DEFAULT_SOCKET_PATH)),

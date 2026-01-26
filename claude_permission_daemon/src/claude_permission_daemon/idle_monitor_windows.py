@@ -157,7 +157,8 @@ class WindowsIdleMonitor(BaseIdleMonitor):
             try:
                 await self._poll_task
             except asyncio.CancelledError:
-                pass
+                # Task cancellation during shutdown is expected and safe to ignore.
+                logger.debug("WindowsIdleMonitor poll task cancelled during stop()")
             self._poll_task = None
 
         logger.info("WindowsIdleMonitor stopped")

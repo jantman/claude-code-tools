@@ -188,6 +188,7 @@ class TestMacIdleMonitor:
             try:
                 await asyncio.sleep(100)
             except asyncio.CancelledError:
+                # Expected when the monitor stops and cancels the poll task; ignore.
                 pass
 
         mock_task = asyncio.create_task(dummy_task())

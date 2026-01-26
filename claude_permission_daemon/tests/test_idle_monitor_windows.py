@@ -148,6 +148,7 @@ class TestWindowsIdleMonitor:
             try:
                 await asyncio.sleep(100)
             except asyncio.CancelledError:
+                # Expected in this test: ignore cancellation of the dummy task.
                 pass
 
         mock_task = asyncio.create_task(dummy_task())

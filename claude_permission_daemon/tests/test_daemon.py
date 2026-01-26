@@ -111,7 +111,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ) as mock_idle_cls, patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -132,8 +132,8 @@ class TestDaemonStartStop:
             mock_socket_server.start.assert_called_once()
             mock_slack_handler.start.assert_called_once()
 
-            # Verify tasks were created
-            assert len(daemon._tasks) == 3
+            # Verify tasks were created (idle_monitor self-manages its task)
+            assert len(daemon._tasks) == 2
 
             # Cleanup
             await daemon.stop()
@@ -149,7 +149,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -176,7 +176,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -186,7 +186,8 @@ class TestDaemonStartStop:
             return_value=mock_slack_handler,
         ):
             await daemon.start()
-            assert len(daemon._tasks) == 3
+            # idle_monitor self-manages its task
+            assert len(daemon._tasks) == 2
 
             await daemon.stop()
 
@@ -204,7 +205,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -232,7 +233,7 @@ class TestDaemonStartStop:
         daemon = Daemon(test_config)
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",
@@ -1081,7 +1082,7 @@ class TestDaemonNotificationHandling:
         mock_slack_handler.run = AsyncMock()
 
         with patch(
-            "claude_permission_daemon.daemon.IdleMonitor",
+            "claude_permission_daemon.daemon.create_idle_monitor",
             return_value=mock_idle_monitor,
         ), patch(
             "claude_permission_daemon.daemon.SocketServer",

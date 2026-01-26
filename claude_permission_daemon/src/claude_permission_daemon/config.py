@@ -4,17 +4,46 @@ Loads configuration from TOML file with environment variable overrides.
 """
 
 import os
+import platform
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Self
 
 
+def _get_default_socket_path() -> Path:
+    """Get platform-appropriate default socket path."""
+    # Check for XDG_RUNTIME_DIR first (Linux standard)
+    if "XDG_RUNTIME_DIR" in os.environ:
+        return Path(os.environ["XDG_RUNTIME_DIR"]) / "claude-permissions.sock"
+
+    # Platform-specific defaults
+    system = platform.system()
+    if system == "Linux":
+        # Try common Linux runtime directories
+        uid = os.getuid()
+        runtime_dir = Path(f"/run/user/{uid}")
+        if runtime_dir.exists():
+            return runtime_dir / "claude-permissions.sock"
+        # Fallback to /tmp for Linux if /run/user doesn't exist
+        return Path("/tmp") / "claude-permissions.sock"
+    elif system == "Darwin":
+        # macOS: use /tmp
+        return Path("/tmp") / "claude-permissions.sock"
+    elif system == "Windows":
+        # Windows: use named pipe (not a file path)
+        return Path(r"\\.\pipe\claude-permissions")
+    else:
+        # Unknown platform: use /tmp as safest fallback
+        return Path("/tmp") / "claude-permissions.sock"
+
+
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "claude-permission-daemon" / "config.toml"
-DEFAULT_SOCKET_PATH = Path(os.environ.get("XDG_RUNTIME_DIR", "/run/user/1000")) / "claude-permissions.sock"
+DEFAULT_SOCKET_PATH = _get_default_socket_path()
 DEFAULT_IDLE_TIMEOUT = 60
 DEFAULT_REQUEST_TIMEOUT = 300
 DEFAULT_SWAYIDLE_BINARY = "swayidle"
+DEFAULT_IOREG_BINARY = "ioreg"
 
 
 @dataclass
@@ -59,12 +88,32 @@ class SwayidleConfig:
 
 
 @dataclass
+class MacIdleConfig:
+    """Configuration for macOS idle monitoring."""
+
+    binary: str = DEFAULT_IOREG_BINARY
+
+
+@dataclass
+class WindowsIdleConfig:
+    """Configuration for Windows idle monitoring.
+
+    Currently empty as Windows implementation uses built-in APIs with no
+    configuration needed. Included for consistency and future extensibility.
+    """
+
+    pass
+
+
+@dataclass
 class Config:
     """Complete daemon configuration."""
 
     daemon: DaemonConfig = field(default_factory=DaemonConfig)
     slack: SlackConfig = field(default_factory=SlackConfig)
     swayidle: SwayidleConfig = field(default_factory=SwayidleConfig)
+    mac: MacIdleConfig = field(default_factory=MacIdleConfig)
+    windows: WindowsIdleConfig = field(default_factory=WindowsIdleConfig)
 
     def validate(self) -> list[str]:
         """Validate configuration, returning list of errors."""
@@ -101,6 +150,7 @@ class Config:
         daemon_data = data.get("daemon", {})
         slack_data = data.get("slack", {})
         swayidle_data = data.get("swayidle", {})
+        mac_data = data.get("mac", {})
 
         daemon_config = DaemonConfig(
             socket_path=Path(daemon_data.get("socket_path", DEFAULT_SOCKET_PATH)),
@@ -119,10 +169,19 @@ class Config:
             binary=swayidle_data.get("binary", DEFAULT_SWAYIDLE_BINARY),
         )
 
+        mac_config = MacIdleConfig(
+            binary=mac_data.get("binary", DEFAULT_IOREG_BINARY),
+        )
+
+        # Windows config currently has no fields
+        windows_config = WindowsIdleConfig()
+
         config = cls(
             daemon=daemon_config,
             slack=slack_config,
             swayidle=swayidle_config,
+            mac=mac_config,
+            windows=windows_config,
         )
 
         # Apply environment variable overrides
@@ -153,3 +212,7 @@ class Config:
         # Swayidle overrides
         if swayidle_binary := os.environ.get("CLAUDE_PERM_SWAYIDLE_BINARY"):
             self.swayidle.binary = swayidle_binary
+
+        # Mac overrides
+        if ioreg_binary := os.environ.get("CLAUDE_PERM_IOREG_BINARY"):
+            self.mac.binary = ioreg_binary

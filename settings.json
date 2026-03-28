@@ -1,26 +1,26 @@
 {
   "hooks": {
     "Notification": [
-        {
-            "matcher": "",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": "~/.local/share/claude-permission-daemon/venv/bin/claude-permission-hook"
-                }
-            ]
-        }
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/share/claude-permission-daemon/venv/bin/claude-permission-hook"
+          }
+        ]
+      }
     ],
     "PermissionRequest": [
-        {
-            "matcher": "*",
-            "hooks": [
-                {
-                    "type": "command",
-                    "command": "~/.local/share/claude-permission-daemon/venv/bin/claude-permission-hook"
-                }
-            ]
-        }
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/share/claude-permission-daemon/venv/bin/claude-permission-hook"
+          }
+        ]
+      }
     ]
   }
 }

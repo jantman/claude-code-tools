@@ -40,6 +40,7 @@ class SwayidleMonitor(BaseIdleMonitor):
         self._running = False
         self._current_idle = False
         self._stderr_task: asyncio.Task | None = None
+        self._run_task: asyncio.Task | None = None
 
     @property
     def idle(self) -> bool:
@@ -121,6 +122,10 @@ class SwayidleMonitor(BaseIdleMonitor):
         self._stderr_task = asyncio.create_task(
             self._read_stderr(), name="swayidle_stderr"
         )
+        # Start stdout reader task (processes IDLE/ACTIVE output)
+        self._run_task = asyncio.create_task(
+            self.run(), name="swayidle_run"
+        )
         logger.info("SwayidleMonitor started")
 
     async def stop(self) -> None:
@@ -129,6 +134,15 @@ class SwayidleMonitor(BaseIdleMonitor):
             return
 
         self._running = False
+
+        # Cancel run task
+        if self._run_task is not None:
+            self._run_task.cancel()
+            try:
+                await self._run_task
+            except asyncio.CancelledError:
+                pass
+            self._run_task = None
 
         # Cancel stderr reader task
         if self._stderr_task is not None:
